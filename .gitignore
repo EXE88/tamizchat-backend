@@ -1,0 +1,14 @@
+# build output
+/tamizchat
+/tamizchat.exe
+/bin/
+
+# runtime data: database, WAL files and temporary uploads
+/data/
+
+# editor / OS noise
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+.DS_Store
