@@ -3,7 +3,7 @@
 این فایل حافظهٔ بین‌چتی است. در شروع هر گفتگوی جدید اول این فایل را بخوان،
 و در پایان هر کار «وضعیت فعلی» و «تصمیم‌ها» را به‌روزرسانی کن.
 
-آخرین به‌روزرسانی: ۱۴۰۵/۰۵/۱۹ (2026-08-10) — پایان فاز ۲
+آخرین به‌روزرسانی: ۱۴۰۵/۰۵/۱۹ (2026-08-10) — پایان فاز ۳
 
 ---
 
@@ -51,7 +51,7 @@ voice changer، پخش صدای مخصوص هنگام kick، پخش صدای م�
 
 ## وضعیت فعلی
 
-**فاز ۱ و فاز ۲ تمام شدند و تست دارند** (۳۱ تست، همه سبز).
+**فازهای ۱ تا ۳ تمام شدند و تست دارند** (۵۲ تست، همه سبز).
 جزئیات فازها در [docs/ROADMAP.md](docs/ROADMAP.md) و قرارداد سیم در
 [docs/PROTOCOL.md](docs/PROTOCOL.md).
 
@@ -62,18 +62,25 @@ backend/
   internal/config/schema.go      رجیستری تایپ‌دار تنظیمات (منبع حقیقت پنل)
   internal/config/config.go      نمای زندهٔ کانفیگ + Set/Reset/Watch
   internal/storage/store.go      باز کردن SQLite با WAL
-  internal/storage/migrations.go مهاجرت‌های forward-only (۰۰۰۱ تا ۰۰۰۳)
+  internal/storage/migrations.go مهاجرت‌های forward-only (۰۰۰۱ تا ۰۰۰۴)
   internal/storage/settings.go   settings + server_uuid + NewUUID
   internal/storage/users.go      جدول users: اولین/آخرین حضور، تعداد بازدید
+  internal/storage/rooms.go      CRUD تعریف دائمی روم‌ها
   internal/protocol/             قرارداد سیم: پاکت، انواع پیام، کدهای خطا
-  internal/session/session.go    یک نشست + صف خروجی بدون بلاک‌شدن
+  internal/session/session.go    یک نشست + صف خروجی بدون بلاک‌شدن + roomID
   internal/session/manager.go    رجیستری نشست‌ها، broadcast، جایگزینی UUID تکراری
   internal/session/validate.go   اعتبارسنجی UUID و نام کاربری
+  internal/textutil/             نرمال‌سازی مشترک نام کاربر و نام روم
+  internal/rooms/room.go         تعریف + اعضا + قلاب Ephemeral برای محتوای موقت
+  internal/rooms/manager.go      CRUD روم، join/leave، انتقال عضویت، پاک‌سازی
+  internal/authz/                تنها نقطهٔ کنترل مجوز (فعلاً OpenPolicy)
   internal/gateway/gateway.go    upgrade + handshake
   internal/gateway/pump.go       read/write pump، dispatch، keepalive
+  internal/gateway/rooms.go      هندلرهای room.* و نگاشت خطاها
   internal/httpapi/              /healthz و /api/v1/server-info و /ws
   internal/logging/              slog با تغییر سطح در زمان اجرا
   internal/version/              نسخه و کامیت (قابل تزریق با ldflags)
+  internal/app/smoke_test.go     تست انتها به انتها روی سرور واقعی
   docs/ROADMAP.md                فازبندی کامل
   docs/PROTOCOL.md               مستند پروتکل برای کلاینت WinUI
 ```
@@ -88,6 +95,22 @@ backend/
   یکتایی بدون حساسیت به حروف بزرگ/کوچک و فقط بین کاربران آنلاین.
 - تمام نوشتن روی سوکت فقط از writePump انجام می‌شود (WebSocket تک‌نویسنده است).
 
+### قواعد مهمی که در فاز ۳ تثبیت شد
+
+- تعریف روم دائمی است، محتوای روم موقت. نقطهٔ اتصال `rooms.Ephemeral` همان
+  جایی است که فاز ۴ (پیام‌ها)، فاز ۶ (فایل‌ها) و فاز ۸ (نقاشی) خودشان را
+  ثبت می‌کنند؛ منطق پاک‌سازی هرگز لازم نیست بداند چه چیزی را پاک می‌کند.
+- `room.member_joined/left` **سرورگستر** پخش می‌شوند، نه فقط داخل روم — چون
+  کلاینت مثل TeamSpeak کل درخت روم‌ها را نشان می‌دهد. به همین دلیل هنگام
+  جابه‌جایی روم، `user.updated` جداگانه فرستاده نمی‌شود (یک رویداد برای یک
+  اتفاق). `user.updated` فقط برای تغییر نام است.
+- اکشن‌های مدیریتی روم شناسهٔ انجام‌دهنده را می‌گیرند تا او از broadcast
+  عمومی مستثنا شود و فریم تکراری نگیرد (پاسخ خودش با `id` همبسته است).
+- هر تغییر مجوز باید از `internal/authz` بگذرد؛ الان `OpenPolicy` است و
+  همه‌چیز را اجازه می‌دهد. **تا فاز ۵ سرور را بدون رمز سرور بالا نیاورید.**
+- میان‌افزار HTTP باید `Unwrap`/`Hijack` داشته باشد وگرنه ارتقای WebSocket
+  با خطای ۵۰۱ می‌شکند (این باگ واقعاً رخ داد و تست رگرسیون دارد).
+
 ### محدودیت‌های شناخته‌شدهٔ فعلی
 
 - پنل مستقیم روی فایل دیتابیس می‌نویسد، پس تغییرات روی سرورِ **در حال اجرا**
@@ -96,11 +119,15 @@ backend/
   سرور است و به سوکت کنترلی فاز ۱۰ نیاز دارد.
 - روی این ویندوز `go test -race` کار نمی‌کند چون gcc نصب نیست؛ تست‌ها بدون
   race detector اجرا شده‌اند.
+- مدیریت روم فعلاً برای همه باز است (`authz.OpenPolicy`) تا فاز ۵.
+- سطح دسترسی روم بر اساس رول هنوز پیاده نشده — به فاز ۵ موکول شد.
+- روم‌های ساخته‌شده از پنل، تا ری‌استارت سرور در سرورِ در حال اجرا دیده
+  نمی‌شوند (همان محدودیت سوکت کنترلی فاز ۱۰).
 
 ## قدم بعدی
 
-فاز ۳: روم‌ها — جدول `rooms`، حافظهٔ موقت روم، join/leave، پاک‌سازی با خروج
-آخرین نفر.
+فاز ۴: چت متنی — بافر پیام درون‌حافظه‌ای که به‌عنوان `rooms.Ephemeral` ثبت
+می‌شود، ارسال/ویرایش/حذف پیام، استیکر، وضعیت تایپ، و سقف نرخ ارسال.
 
 ## قواعد کار
 

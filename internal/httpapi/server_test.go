@@ -100,3 +100,55 @@ func TestGatewayIsMountedOnWS(t *testing.T) {
 		t.Fatalf("/ws should reach the gateway handler, got status %d", rec.Code)
 	}
 }
+
+// The logging middleware wraps the ResponseWriter. If that wrapper hides the
+// underlying connection, every WebSocket upgrade fails with 501 — so the
+// handler must still be hijackable through it.
+func TestHandlerStaysHijackable(t *testing.T) {
+	ctx := context.Background()
+	store, err := storage.Open(ctx, filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer store.Close()
+	cfg, err := config.Load(ctx, store)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	hijackable := make(chan bool, 1)
+	h := httpapi.Handler(httpapi.Deps{
+		Config:      cfg,
+		StartedAt:   time.Now(),
+		OnlineUsers: func() int { return 0 },
+		Gateway: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			conn, _, err := http.NewResponseController(w).Hijack()
+			if err != nil {
+				hijackable <- false
+				w.WriteHeader(http.StatusNotImplemented)
+				return
+			}
+			hijackable <- true
+			conn.Close()
+		}),
+	})
+
+	srv := httptest.NewServer(h)
+	defer srv.Close()
+
+	// The response is hijacked and dropped, so a transport error here is
+	// expected; only the signal from inside the handler matters.
+	resp, err := srv.Client().Get(srv.URL + "/ws")
+	if err == nil {
+		resp.Body.Close()
+	}
+
+	select {
+	case ok := <-hijackable:
+		if !ok {
+			t.Fatal("the handler chain is not hijackable: WebSocket upgrades would fail with 501")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("handler was never reached")
+	}
+}

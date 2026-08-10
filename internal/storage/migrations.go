@@ -49,6 +49,24 @@ CREATE TABLE users (
 
 CREATE INDEX idx_users_last_seen ON users (last_seen_at DESC);`,
 	},
+	{
+		// Only a room's definition is persistent. Everything that happens
+		// inside it — messages, files, drawings — stays in memory and is
+		// dropped when the room empties.
+		name: "0004_rooms",
+		stmt: `
+CREATE TABLE rooms (
+	id         TEXT PRIMARY KEY,
+	name       TEXT NOT NULL,
+	password   TEXT NOT NULL DEFAULT '',
+	capacity   INTEGER NOT NULL,
+	position   INTEGER NOT NULL DEFAULT 0,
+	created_at INTEGER NOT NULL,
+	updated_at INTEGER NOT NULL
+) STRICT;
+
+CREATE UNIQUE INDEX idx_rooms_name ON rooms (name COLLATE NOCASE);`,
+	},
 }
 
 func (s *Store) migrate(ctx context.Context) error {

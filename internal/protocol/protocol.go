@@ -26,6 +26,13 @@ const (
 	TypeHello  = "hello"  // first frame after the socket opens
 	TypePing   = "ping"   // application-level keepalive
 	TypeRename = "rename" // change display name
+
+	TypeRoomList   = "room.list"
+	TypeRoomJoin   = "room.join"
+	TypeRoomLeave  = "room.leave"
+	TypeRoomCreate = "room.create"
+	TypeRoomUpdate = "room.update"
+	TypeRoomDelete = "room.delete"
 )
 
 // Frame types sent by the server.
@@ -36,6 +43,16 @@ const (
 	TypeUserJoined  = "user.joined"
 	TypeUserLeft    = "user.left"
 	TypeUserUpdated = "user.updated"
+
+	TypeRooms            = "room.list"    // reply to room.list
+	TypeRoomJoined       = "room.joined"  // reply to room.join, for the caller
+	TypeRoomLeft         = "room.left"    // reply to room.leave, for the caller
+	TypeRoomCreated      = "room.created" // a room appeared
+	TypeRoomUpdated      = "room.updated" // a room definition changed
+	TypeRoomDeleted      = "room.deleted" // a room disappeared
+	TypeRoomMemberJoined = "room.member_joined"
+	TypeRoomMemberLeft   = "room.member_left"
+	TypeRoomPurged       = "room.purged" // the room emptied and its content was dropped
 )
 
 // Error codes. The client shows its own localized text per code, so these
@@ -52,6 +69,15 @@ const (
 	ErrTimeout         = "handshake_timeout"
 	ErrTooFast         = "rate_limited"
 	ErrInternal        = "internal_error"
+
+	ErrRoomNotFound    = "room_not_found"
+	ErrRoomNameTaken   = "room_name_taken"
+	ErrRoomPassword    = "room_bad_password"
+	ErrRoomFull        = "room_full"
+	ErrRoomLimit       = "room_limit_reached"
+	ErrRoomInvalidName = "room_invalid_name"
+	ErrNotInRoom       = "not_in_a_room"
+	ErrForbidden       = "forbidden"
 )
 
 // Reasons a session ends, reported in user.left and in the close frame.
@@ -72,12 +98,90 @@ type Hello struct {
 	ClientVersion string `json:"client_version,omitempty"`
 }
 
-// User is the public view of a connected participant.
+// User is the public view of a connected participant. RoomID is empty while the
+// user is connected to the server but has not entered any room.
 type User struct {
 	ClientUUID string `json:"client_uuid"`
 	Username   string `json:"username"`
 	JoinedAt   int64  `json:"joined_at"` // unix seconds
+	RoomID     string `json:"room_id"`
 }
+
+// Room is the public view of a room. The password itself is never sent; only
+// whether one is set.
+type Room struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	HasPassword bool   `json:"has_password"`
+	Capacity    int    `json:"capacity"`
+	Position    int    `json:"position"`
+	MemberCount int    `json:"member_count"`
+	Members     []User `json:"members"`
+}
+
+// RoomList is the reply to room.list.
+type RoomList struct {
+	Rooms []Room `json:"rooms"`
+}
+
+// RoomJoin asks to enter a room.
+type RoomJoin struct {
+	RoomID   string `json:"room_id"`
+	Password string `json:"password,omitempty"`
+}
+
+// RoomJoined confirms entry and carries the room's current state.
+type RoomJoined struct {
+	Room Room `json:"room"`
+}
+
+// RoomLeft confirms departure. Reason is empty when the user left on purpose.
+type RoomLeft struct {
+	RoomID string `json:"room_id"`
+	Reason string `json:"reason,omitempty"`
+}
+
+// RoomCreate defines a new room. Capacity 0 means "use the server default".
+type RoomCreate struct {
+	Name     string `json:"name"`
+	Password string `json:"password,omitempty"`
+	Capacity int    `json:"capacity,omitempty"`
+}
+
+// RoomUpdate edits a room. Only the fields that are present are changed, which
+// is why every field is a pointer.
+type RoomUpdate struct {
+	RoomID   string  `json:"room_id"`
+	Name     *string `json:"name,omitempty"`
+	Password *string `json:"password,omitempty"`
+	Capacity *int    `json:"capacity,omitempty"`
+	Position *int    `json:"position,omitempty"`
+}
+
+// RoomDelete removes a room.
+type RoomDelete struct {
+	RoomID string `json:"room_id"`
+}
+
+// RoomRef identifies a room in notifications that need nothing else.
+type RoomRef struct {
+	RoomID string `json:"room_id"`
+}
+
+// RoomMember announces someone entering or leaving a room.
+type RoomMember struct {
+	RoomID string `json:"room_id"`
+	User   User   `json:"user"`
+	Reason string `json:"reason,omitempty"`
+}
+
+// Reasons a user stops being a member of a room.
+const (
+	ReasonRoomDeleted     = "room_deleted"
+	ReasonSwitchedRoom    = "switched_room"
+	ReasonDisconnected    = "disconnected"
+	ReasonLeftVoluntarily = "left"
+)
 
 // Welcome is the server's answer to a successful hello.
 type Welcome struct {
@@ -89,6 +193,7 @@ type Welcome struct {
 	Heartbeat  int        `json:"heartbeat_sec"`
 	You        User       `json:"you"`
 	Users      []User     `json:"users"`
+	Rooms      []Room     `json:"rooms"`
 	Limits     UserLimits `json:"limits"`
 }
 

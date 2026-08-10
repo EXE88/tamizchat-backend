@@ -3,7 +3,10 @@ package gateway_test
 import (
 	"context"
 	"encoding/json"
+	"io"
+	"log/slog"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -13,6 +16,7 @@ import (
 	"tamizchat/internal/config"
 	"tamizchat/internal/gateway"
 	"tamizchat/internal/protocol"
+	"tamizchat/internal/rooms"
 	"tamizchat/internal/session"
 	"tamizchat/internal/storage"
 )
@@ -22,12 +26,26 @@ const (
 	uuidB = "22222222-2222-4222-8222-222222222222"
 )
 
+// TestMain silences the server logs: a failing assertion is easier to find
+// without hundreds of migration and presence lines around it.
+func TestMain(m *testing.M) {
+	slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	os.Exit(m.Run())
+}
+
 type fixture struct {
 	srv      *httptest.Server
 	cfg      *config.Config
 	store    *storage.Store
 	sessions *session.Manager
+	rooms    *rooms.Manager
+	policy   *togglePolicy
 }
+
+// togglePolicy stands in for the role system arriving in phase 5.
+type togglePolicy struct{ allowRoomManagement bool }
+
+func (p *togglePolicy) CanManageRooms(string) bool { return p.allowRoomManagement }
 
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
@@ -45,12 +63,18 @@ func newFixture(t *testing.T) *fixture {
 	}
 
 	sessions := session.NewManager(func() int { return cfg.Int(config.KeyServerMaxUsers) })
-	gw := gateway.New(cfg, sessions, store, "server-uuid")
+	roomMgr, err := rooms.NewManager(ctx, store, cfg, sessions)
+	if err != nil {
+		t.Fatalf("room manager: %v", err)
+	}
+
+	policy := &togglePolicy{allowRoomManagement: true}
+	gw := gateway.New(cfg, sessions, roomMgr, store, policy, "server-uuid")
 
 	srv := httptest.NewServer(gw)
 	t.Cleanup(srv.Close)
 
-	return &fixture{srv: srv, cfg: cfg, store: store, sessions: sessions}
+	return &fixture{srv: srv, cfg: cfg, store: store, sessions: sessions, rooms: roomMgr, policy: policy}
 }
 
 type client struct {

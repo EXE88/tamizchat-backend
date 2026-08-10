@@ -14,8 +14,10 @@ import (
 
 	"github.com/coder/websocket"
 
+	"tamizchat/internal/authz"
 	"tamizchat/internal/config"
 	"tamizchat/internal/protocol"
+	"tamizchat/internal/rooms"
 	"tamizchat/internal/session"
 	"tamizchat/internal/storage"
 )
@@ -42,13 +44,23 @@ type Users interface {
 type Gateway struct {
 	cfg      *config.Config
 	sessions *session.Manager
+	rooms    *rooms.Manager
 	users    Users
+	policy   authz.Policy
 	serverID string
 }
 
 // New builds a gateway.
-func New(cfg *config.Config, sessions *session.Manager, users Users, serverUUID string) *Gateway {
-	return &Gateway{cfg: cfg, sessions: sessions, users: users, serverID: serverUUID}
+func New(cfg *config.Config, sessions *session.Manager, roomMgr *rooms.Manager,
+	users Users, policy authz.Policy, serverUUID string) *Gateway {
+	return &Gateway{
+		cfg:      cfg,
+		sessions: sessions,
+		rooms:    roomMgr,
+		users:    users,
+		policy:   policy,
+		serverID: serverUUID,
+	}
 }
 
 // ServeHTTP upgrades the request and runs the connection until it ends.
@@ -138,6 +150,12 @@ func (g *Gateway) handshake(ctx context.Context, conn *websocket.Conn, remote st
 		slog.Error("persist user failed", "client_uuid", clientUUID, "err", err)
 	}
 
+	// A reconnecting client keeps the room it was in, so a network blip does
+	// not silently drop it out of the conversation.
+	if replaced != nil {
+		g.rooms.TransferMembership(replaced, sess)
+	}
+
 	welcome := protocol.Welcome{
 		SessionID:  sess.ID,
 		Protocol:   protocol.Version,
@@ -147,6 +165,7 @@ func (g *Gateway) handshake(ctx context.Context, conn *websocket.Conn, remote st
 		Heartbeat:  g.cfg.Int(config.KeyHeartbeatSec),
 		You:        sess.User(),
 		Users:      g.sessions.Users(),
+		Rooms:      g.rooms.Views(),
 		Limits: protocol.UserLimits{
 			UsernameMin: minLen,
 			UsernameMax: maxLen,

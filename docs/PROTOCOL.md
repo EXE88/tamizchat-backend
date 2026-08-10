@@ -54,6 +54,9 @@
 }}
 ```
 
+`welcome.rooms` کل درخت روم‌ها را همراه اعضای هر روم می‌دهد، تا کلاینت بلافاصله
+بتواند رابط را بسازد بدون درخواست اضافه.
+
 ## پیام‌های کلاینت → سرور
 
 | نوع | محتوا | توضیح |
@@ -61,6 +64,14 @@
 | `hello` | بالا | فقط یک‌بار، در ابتدای اتصال |
 | `ping` | — | پاسخ `pong` با همان `id` |
 | `rename` | `{"username": "نام جدید"}` | تغییر نام نمایشی |
+| `room.list` | — | پاسخ `room.list` با کل درخت روم‌ها |
+| `room.join` | `{"room_id", "password"}` | ورود به روم؛ روم قبلی خودکار ترک می‌شود |
+| `room.leave` | — | خروج از روم فعلی |
+| `room.create` | `{"name", "password", "capacity"}` | نیازمند مجوز مدیریت روم |
+| `room.update` | `{"room_id", "name"?, "password"?, "capacity"?, "position"?}` | فقط فیلدهای موجود تغییر می‌کنند |
+| `room.delete` | `{"room_id"}` | نیازمند مجوز مدیریت روم |
+
+`capacity: 0` هنگام ساخت یعنی «از پیش‌فرض سرور استفاده کن».
 
 ## پیام‌های سرور → کلاینت
 
@@ -69,9 +80,41 @@
 | `welcome` | بالا |
 | `pong` | — |
 | `error` | `{"code": "...", "message": "..."}` |
-| `user.joined` | `{"client_uuid", "username", "joined_at"}` |
+| `user.joined` | `{"client_uuid", "username", "joined_at", "room_id"}` |
 | `user.left` | `{"client_uuid", "username", "reason"}` |
-| `user.updated` | `{"client_uuid", "username", "joined_at"}` |
+| `user.updated` | همان User — فقط برای تغییر نام |
+| `room.list` | `{"rooms": [Room]}` |
+| `room.joined` | `{"room": Room}` — فقط برای خودِ درخواست‌دهنده |
+| `room.left` | `{"room_id", "reason"}` — فقط برای خودِ کاربر |
+| `room.created` / `room.updated` | یک Room |
+| `room.deleted` | `{"room_id"}` |
+| `room.member_joined` / `room.member_left` | `{"room_id", "user", "reason"}` |
+| `room.purged` | `{"room_id"}` — محتوای موقت روم پاک شد |
+
+قالب `Room`:
+
+```json
+{ "id": "…", "name": "…", "has_password": false, "capacity": 25,
+  "position": 0, "member_count": 2, "members": [ User ] }
+```
+
+رمز روم هرگز برای کلاینت فرستاده نمی‌شود؛ فقط `has_password`.
+
+## چرا رویدادهای عضویت روم سرورگسترند
+
+`room.member_joined` و `room.member_left` برای **همهٔ** کاربران سرور فرستاده
+می‌شوند، نه فقط اعضای همان روم — چون کلاینت مثل TeamSpeak کل درخت روم‌ها و
+افراد داخل هرکدام را نشان می‌دهد. به همین دلیل هنگام جابه‌جایی بین روم‌ها
+`user.updated` جداگانه‌ای فرستاده نمی‌شود: یک رویداد به‌ازای هر جابه‌جایی، که
+خودش شناسهٔ روم را حمل می‌کند. `user.updated` فقط برای تغییر نام است.
+
+## چرخهٔ عمر محتوای روم
+
+تعریف روم (نام، رمز، ظرفیت) دائمی است و در دیتابیس می‌ماند. اما هرچه داخل روم
+اتفاق می‌افتد — پیام، فایل، نقاشی — موقتی است: وقتی آخرین نفر بیرون می‌رود،
+یک مهلت کوتاه (`rooms.purge_grace_sec`، پیش‌فرض ۳۰ ثانیه) شمرده می‌شود و اگر
+کسی برنگشت، همه‌چیز پاک و `room.purged` منتشر می‌شود. مهلت برای این است که
+یک قطعی لحظه‌ای یا بیرون‌رفتن و برگشتن فوری، گفتگوی فعال را از بین نبرد.
 
 ## کدهای خطا
 
@@ -90,10 +133,22 @@
 | `bad_password` | رمز سرور نادرست |
 | `server_full` | ظرفیت سرور تکمیل |
 | `internal_error` | خطای داخلی سرور |
+| `room_not_found` | چنین رومی وجود ندارد |
+| `room_name_taken` | نام روم تکراری است |
+| `room_bad_password` | رمز روم نادرست |
+| `room_full` | ظرفیت روم تکمیل |
+| `room_limit_reached` | به سقف تعداد روم‌های سرور رسیده‌اید |
+| `room_invalid_name` | نام یا ظرفیت روم قابل قبول نیست (`message` قابل نمایش است) |
+| `not_in_a_room` | عملیات نیازمند حضور در یک روم است |
+| `forbidden` | مجوز لازم را ندارید |
 
 ## دلایل قطع اتصال (`reason`)
 
 `client_left` · `replaced_by_new_connection` · `timeout` · `server_shutdown` · `slow_consumer`
+
+## دلایل خروج از روم (`reason`)
+
+`left` · `switched_room` · `disconnected` · `room_deleted`
 
 ## قواعد نام کاربری
 

@@ -60,6 +60,7 @@ func (p *Panel) mainMenu(ctx context.Context) error {
 		p.printf("  3) نمایش همهٔ تنظیمات\n")
 		p.printf("  4) بازگرداندن یک تنظیم به مقدار پیش‌فرض\n")
 		p.printf("  5) کاربران شناخته‌شده\n")
+		p.printf("  6) مدیریت روم‌ها\n")
 		p.printf("  0) خروج\n\n")
 
 		switch p.ask("انتخاب کنید") {
@@ -73,6 +74,8 @@ func (p *Panel) mainMenu(ctx context.Context) error {
 			p.resetSetting(ctx)
 		case "5":
 			p.showUsers(ctx)
+		case "6":
+			p.roomsMenu(ctx)
 		case "0", "q", "exit":
 			p.println("")
 			return nil

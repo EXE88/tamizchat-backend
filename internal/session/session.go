@@ -28,6 +28,7 @@ type Session struct {
 
 	mu       sync.RWMutex
 	username string
+	roomID   string
 	closed   bool
 	reason   string
 
@@ -64,12 +65,30 @@ func (s *Session) SetUsername(name string) {
 	s.mu.Unlock()
 }
 
+// RoomID is the room the user is currently in ("" when in none).
+func (s *Session) RoomID() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.roomID
+}
+
+// SetRoomID records the user's current room. The room manager owns this value;
+// nothing else should write it.
+func (s *Session) SetRoomID(id string) {
+	s.mu.Lock()
+	s.roomID = id
+	s.mu.Unlock()
+}
+
 // User is the public view of this session.
 func (s *Session) User() protocol.User {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return protocol.User{
 		ClientUUID: s.ClientUUID,
-		Username:   s.Username(),
+		Username:   s.username,
 		JoinedAt:   s.JoinedAt.Unix(),
+		RoomID:     s.roomID,
 	}
 }
 
