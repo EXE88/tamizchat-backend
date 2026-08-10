@@ -135,6 +135,16 @@ func (c *Config) Bool(key string) bool {
 	return b
 }
 
+// UsernameLimits returns the name length bounds, guaranteeing min <= max even
+// if the two settings were edited into an inconsistent state.
+func (c *Config) UsernameLimits() (min, max int) {
+	min, max = c.Int(KeyUsernameMinLen), c.Int(KeyUsernameMaxLen)
+	if min > max {
+		min, max = max, min
+	}
+	return min, max
+}
+
 // Snapshot returns all current values, for the admin panel's list view.
 func (c *Config) Snapshot() map[string]string {
 	c.mu.RLock()

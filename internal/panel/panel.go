@@ -10,6 +10,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"tamizchat/internal/config"
 	"tamizchat/internal/storage"
@@ -58,6 +59,7 @@ func (p *Panel) mainMenu(ctx context.Context) error {
 		p.printf("  2) تنظیمات سرور\n")
 		p.printf("  3) نمایش همهٔ تنظیمات\n")
 		p.printf("  4) بازگرداندن یک تنظیم به مقدار پیش‌فرض\n")
+		p.printf("  5) کاربران شناخته‌شده\n")
 		p.printf("  0) خروج\n\n")
 
 		switch p.ask("انتخاب کنید") {
@@ -69,6 +71,8 @@ func (p *Panel) mainMenu(ctx context.Context) error {
 			p.showAll()
 		case "4":
 			p.resetSetting(ctx)
+		case "5":
+			p.showUsers(ctx)
 		case "0", "q", "exit":
 			p.println("")
 			return nil
@@ -95,6 +99,49 @@ func (p *Panel) showStatus(ctx context.Context) {
 	p.printf("  ارسال فایل   : %s\n", yesNo(p.cfg.Bool(config.KeyUploadsEnabled)))
 	p.printf("  فایل دیتابیس : %s\n\n", p.store.Path())
 	p.pause()
+}
+
+// showUsers lists clients that have connected at least once. The list of who is
+// online *right now* lives in the running server's memory and needs the control
+// socket coming in phase 10.
+func (p *Panel) showUsers(ctx context.Context) {
+	p.clear()
+	p.banner()
+
+	total, err := p.store.CountUsers(ctx)
+	if err != nil {
+		p.warn("خواندن کاربران ناموفق بود: " + err.Error())
+		return
+	}
+	users, err := p.store.RecentUsers(ctx, 50)
+	if err != nil {
+		p.warn("خواندن کاربران ناموفق بود: " + err.Error())
+		return
+	}
+
+	p.printf("  %s (مجموع: %d)\n\n", bold("کاربران شناخته‌شده"), total)
+	if len(users) == 0 {
+		p.println("  هنوز هیچ کاربری وصل نشده است.\n")
+		p.pause()
+		return
+	}
+
+	p.printf("  %-24s  %-38s  %-10s  %s\n", "نام", "شناسهٔ کلاینت", "بازدید", "آخرین حضور")
+	for _, u := range users {
+		p.printf("  %-24s  %-38s  %-10d  %s\n",
+			truncate(u.Username, 24), u.ClientUUID, u.VisitCount,
+			time.Unix(u.LastSeenAt, 0).Format("2006-01-02 15:04"))
+	}
+	p.println("")
+	p.pause()
+}
+
+func truncate(s string, max int) string {
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	return string(r[:max-1]) + "…"
 }
 
 func (p *Panel) sectionsMenu(ctx context.Context) {
@@ -216,6 +263,8 @@ func sectionTitle(section string) string {
 		return "تنظیمات عمومی سرور"
 	case "network":
 		return "شبکه"
+	case "users":
+		return "کاربران"
 	case "rooms":
 		return "روم‌ها"
 	case "uploads":

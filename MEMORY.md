@@ -3,7 +3,7 @@
 این فایل حافظهٔ بین‌چتی است. در شروع هر گفتگوی جدید اول این فایل را بخوان،
 و در پایان هر کار «وضعیت فعلی» و «تصمیم‌ها» را به‌روزرسانی کن.
 
-آخرین به‌روزرسانی: ۱۴۰۵/۰۵/۱۹ (2026-08-10)
+آخرین به‌روزرسانی: ۱۴۰۵/۰۵/۱۹ (2026-08-10) — پایان فاز ۲
 
 ---
 
@@ -51,9 +51,9 @@ voice changer، پخش صدای مخصوص هنگام kick، پخش صدای م�
 
 ## وضعیت فعلی
 
-**فاز ۱ تمام شد و تست شد.** جزئیات فازها در [docs/ROADMAP.md](docs/ROADMAP.md).
-
-آنچه ساخته شد:
+**فاز ۱ و فاز ۲ تمام شدند و تست دارند** (۳۱ تست، همه سبز).
+جزئیات فازها در [docs/ROADMAP.md](docs/ROADMAP.md) و قرارداد سیم در
+[docs/PROTOCOL.md](docs/PROTOCOL.md).
 
 ```
 backend/
@@ -62,21 +62,45 @@ backend/
   internal/config/schema.go      رجیستری تایپ‌دار تنظیمات (منبع حقیقت پنل)
   internal/config/config.go      نمای زندهٔ کانفیگ + Set/Reset/Watch
   internal/storage/store.go      باز کردن SQLite با WAL
-  internal/storage/migrations.go مهاجرت‌های forward-only
+  internal/storage/migrations.go مهاجرت‌های forward-only (۰۰۰۱ تا ۰۰۰۳)
   internal/storage/settings.go   settings + server_uuid + NewUUID
-  internal/httpapi/              /healthz و /api/v1/server-info
+  internal/storage/users.go      جدول users: اولین/آخرین حضور، تعداد بازدید
+  internal/protocol/             قرارداد سیم: پاکت، انواع پیام، کدهای خطا
+  internal/session/session.go    یک نشست + صف خروجی بدون بلاک‌شدن
+  internal/session/manager.go    رجیستری نشست‌ها، broadcast، جایگزینی UUID تکراری
+  internal/session/validate.go   اعتبارسنجی UUID و نام کاربری
+  internal/gateway/gateway.go    upgrade + handshake
+  internal/gateway/pump.go       read/write pump، dispatch، keepalive
+  internal/httpapi/              /healthz و /api/v1/server-info و /ws
   internal/logging/              slog با تغییر سطح در زمان اجرا
   internal/version/              نسخه و کامیت (قابل تزریق با ldflags)
   docs/ROADMAP.md                فازبندی کامل
+  docs/PROTOCOL.md               مستند پروتکل برای کلاینت WinUI
 ```
 
-نکتهٔ مهم (محدودیت شناخته‌شدهٔ فعلی): پنل مستقیم روی فایل دیتابیس می‌نویسد،
-پس تغییرات تا **فاز ۱۰** روی سرورِ در حال اجرا فقط بعد از ری‌استارت اعمال
-می‌شوند. در فاز ۱۰ یک سوکت کنترلی اضافه می‌شود.
+### قواعد مهمی که در فاز ۲ تثبیت شد
+
+- یک `client_uuid` = یک حضور. اتصال جدید با همان UUID، نشست قبلی را با دلیل
+  `replaced_by_new_connection` می‌بندد و **هیچ** رویداد join/leave برای بقیه
+  منتشر نمی‌شود (تا قطعی لحظه‌ای کاربر برای دیگران دیده نشود).
+- کلاینت کند (صف خروجی پر) قطع می‌شود، نه اینکه حافظهٔ سرور را بزرگ کند.
+- نام کاربری: کاراکتر کنترلی و کاراکترهای جهت‌دهی متن ممنوع (ضد جعل هویت)،
+  یکتایی بدون حساسیت به حروف بزرگ/کوچک و فقط بین کاربران آنلاین.
+- تمام نوشتن روی سوکت فقط از writePump انجام می‌شود (WebSocket تک‌نویسنده است).
+
+### محدودیت‌های شناخته‌شدهٔ فعلی
+
+- پنل مستقیم روی فایل دیتابیس می‌نویسد، پس تغییرات روی سرورِ **در حال اجرا**
+  تا فاز ۱۰ فقط بعد از ری‌استارت اعمال می‌شوند.
+- پنل فقط کاربران ذخیره‌شده را نشان می‌دهد؛ لیست آنلاین‌ها در حافظهٔ پروسهٔ
+  سرور است و به سوکت کنترلی فاز ۱۰ نیاز دارد.
+- روی این ویندوز `go test -race` کار نمی‌کند چون gcc نصب نیست؛ تست‌ها بدون
+  race detector اجرا شده‌اند.
 
 ## قدم بعدی
 
-فاز ۲: هویت کاربر (UUID) و WebSocket gateway.
+فاز ۳: روم‌ها — جدول `rooms`، حافظهٔ موقت روم، join/leave، پاک‌سازی با خروج
+آخرین نفر.
 
 ## قواعد کار
 

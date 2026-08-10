@@ -12,8 +12,11 @@ import (
 	"time"
 
 	"tamizchat/internal/config"
+	"tamizchat/internal/gateway"
 	"tamizchat/internal/httpapi"
 	"tamizchat/internal/logging"
+	"tamizchat/internal/protocol"
+	"tamizchat/internal/session"
 	"tamizchat/internal/storage"
 	"tamizchat/internal/version"
 )
@@ -52,11 +55,15 @@ func Run(ctx context.Context, opts Options) error {
 		return err
 	}
 
+	sessions := session.NewManager(func() int { return cfg.Int(config.KeyServerMaxUsers) })
+	gw := gateway.New(cfg, sessions, store, serverUUID)
+
 	handler := httpapi.Handler(httpapi.Deps{
 		Config:      cfg,
 		ServerUUID:  serverUUID,
 		StartedAt:   time.Now(),
-		OnlineUsers: func() int { return 0 }, // replaced by the session manager in phase 3
+		OnlineUsers: sessions.Count,
+		Gateway:     gw,
 	})
 
 	addr := cfg.String(config.KeyListenAddr)
@@ -88,8 +95,12 @@ func Run(ctx context.Context, opts Options) error {
 	case err := <-errCh:
 		return err
 	case <-ctx.Done():
-		slog.Info("shutdown requested")
+		slog.Info("shutdown requested", "online", sessions.Count())
 	}
+
+	// Tell clients why they are being disconnected before the listener closes,
+	// so they can show a proper message instead of a generic network error.
+	sessions.CloseAll(protocol.ReasonShutdown)
 
 	shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
 	defer cancel()

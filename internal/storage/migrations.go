@@ -32,6 +32,23 @@ CREATE TABLE server_identity (
 	created_at  INTEGER NOT NULL
 ) STRICT;`,
 	},
+	{
+		// Every client that has ever connected, keyed by the UUID the client
+		// generated at install time. This is the identity the admin system
+		// will hang roles and bans off in later phases.
+		name: "0003_users",
+		stmt: `
+CREATE TABLE users (
+	client_uuid   TEXT PRIMARY KEY,
+	username      TEXT NOT NULL,
+	first_seen_at INTEGER NOT NULL,
+	last_seen_at  INTEGER NOT NULL,
+	visit_count   INTEGER NOT NULL DEFAULT 1,
+	note          TEXT NOT NULL DEFAULT ''
+) STRICT;
+
+CREATE INDEX idx_users_last_seen ON users (last_seen_at DESC);`,
+	},
 }
 
 func (s *Store) migrate(ctx context.Context) error {

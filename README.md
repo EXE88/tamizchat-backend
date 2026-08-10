@@ -42,8 +42,16 @@ go build -o tamizchat ./cmd/tamizchat
 |-----|------|-------|
 | GET | `/healthz` | سلامت سرویس و uptime |
 | GET | `/api/v1/server-info` | اطلاعات عمومی سرور برای کلاینت پیش از اتصال |
+| GET | `/ws` | اتصال WebSocket کلاینت (handshake با پیام `hello`) |
+
+## تست
+
+```bash
+go test ./...
+```
 
 ## مستندات
 
+- [پروتکل کلاینت ↔ سرور](docs/PROTOCOL.md)
 - [نقشهٔ راه و فازبندی](docs/ROADMAP.md)
 - [حافظهٔ پروژه و تصمیم‌های معماری](MEMORY.md)

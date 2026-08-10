@@ -35,7 +35,7 @@ type Setting struct {
 }
 
 // Sections in the order the admin panel should show them.
-var Sections = []string{"server", "network", "rooms", "uploads", "livekit", "log"}
+var Sections = []string{"server", "network", "users", "rooms", "uploads", "livekit", "log"}
 
 var registry = buildRegistry(
 	Setting{
@@ -65,6 +65,23 @@ var registry = buildRegistry(
 	Setting{
 		Key: KeyPublicHost, Section: "network", Kind: KindString, Default: "",
 		Title: "هاست عمومی", Help: "دامنه یا آی‌پی که کلاینت‌ها با آن وصل می‌شوند؛ برای ساخت لینک‌ها استفاده می‌شود.",
+	},
+
+	Setting{
+		Key: KeyHeartbeatSec, Section: "network", Kind: KindInt, Default: "30",
+		Title: "فاصلهٔ ضربان (ثانیه)", Help: "هر چند ثانیه سرور کلاینت را ping کند تا اتصال‌های مرده تشخیص داده شوند.",
+		Validate: intRange(5, 600),
+	},
+
+	Setting{
+		Key: KeyUsernameMinLen, Section: "users", Kind: KindInt, Default: "3",
+		Title: "حداقل طول نام کاربری", Help: "تعداد کاراکتر.",
+		Validate: intRange(1, 64),
+	},
+	Setting{
+		Key: KeyUsernameMaxLen, Section: "users", Kind: KindInt, Default: "24",
+		Title: "حداکثر طول نام کاربری", Help: "تعداد کاراکتر؛ باید از حداقل بزرگ‌تر باشد.",
+		Validate: intRange(1, 64),
 	},
 
 	Setting{
@@ -143,8 +160,12 @@ const (
 	KeyServerPassword = "server.password"
 	KeyServerMaxUsers = "server.max_users"
 
-	KeyListenAddr = "network.listen_addr"
-	KeyPublicHost = "network.public_host"
+	KeyListenAddr   = "network.listen_addr"
+	KeyPublicHost   = "network.public_host"
+	KeyHeartbeatSec = "network.heartbeat_sec"
+
+	KeyUsernameMinLen = "users.username_min_len"
+	KeyUsernameMaxLen = "users.username_max_len"
 
 	KeyRoomsMaxPerServer    = "rooms.max_per_server"
 	KeyRoomsDefaultMaxUsers = "rooms.default_max_users"

@@ -1,0 +1,372 @@
+package gateway_test
+
+import (
+	"context"
+	"encoding/json"
+	"net/http/httptest"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/coder/websocket"
+
+	"tamizchat/internal/config"
+	"tamizchat/internal/gateway"
+	"tamizchat/internal/protocol"
+	"tamizchat/internal/session"
+	"tamizchat/internal/storage"
+)
+
+const (
+	uuidA = "11111111-1111-4111-8111-111111111111"
+	uuidB = "22222222-2222-4222-8222-222222222222"
+)
+
+type fixture struct {
+	srv      *httptest.Server
+	cfg      *config.Config
+	store    *storage.Store
+	sessions *session.Manager
+}
+
+func newFixture(t *testing.T) *fixture {
+	t.Helper()
+	ctx := context.Background()
+
+	store, err := storage.Open(ctx, filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { store.Close() })
+
+	cfg, err := config.Load(ctx, store)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	sessions := session.NewManager(func() int { return cfg.Int(config.KeyServerMaxUsers) })
+	gw := gateway.New(cfg, sessions, store, "server-uuid")
+
+	srv := httptest.NewServer(gw)
+	t.Cleanup(srv.Close)
+
+	return &fixture{srv: srv, cfg: cfg, store: store, sessions: sessions}
+}
+
+type client struct {
+	t    *testing.T
+	conn *websocket.Conn
+}
+
+func (f *fixture) dial(t *testing.T) *client {
+	t.Helper()
+	conn, _, err := websocket.Dial(context.Background(), f.srv.URL, nil)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	t.Cleanup(func() { conn.CloseNow() })
+	return &client{t: t, conn: conn}
+}
+
+func (c *client) send(typ, id string, payload any) {
+	c.t.Helper()
+	frame, err := protocol.Encode(typ, id, payload)
+	if err != nil {
+		c.t.Fatalf("encode %s: %v", typ, err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := c.conn.Write(ctx, websocket.MessageText, frame); err != nil {
+		c.t.Fatalf("write %s: %v", typ, err)
+	}
+}
+
+func (c *client) recv() protocol.Envelope {
+	c.t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	_, data, err := c.conn.Read(ctx)
+	if err != nil {
+		c.t.Fatalf("read: %v", err)
+	}
+	var env protocol.Envelope
+	if err := json.Unmarshal(data, &env); err != nil {
+		c.t.Fatalf("decode frame %q: %v", data, err)
+	}
+	return env
+}
+
+// expect reads one frame and asserts its type.
+func (c *client) expect(typ string) protocol.Envelope {
+	c.t.Helper()
+	env := c.recv()
+	if env.Type != typ {
+		c.t.Fatalf("expected frame %q, got %q (%s)", typ, env.Type, env.Data)
+	}
+	return env
+}
+
+func (c *client) decode(env protocol.Envelope, into any) {
+	c.t.Helper()
+	if err := json.Unmarshal(env.Data, into); err != nil {
+		c.t.Fatalf("decode payload: %v", err)
+	}
+}
+
+// hello performs a handshake and returns the welcome payload.
+func (f *fixture) hello(t *testing.T, uuid, username, password string) (*client, protocol.Welcome) {
+	t.Helper()
+	c := f.dial(t)
+	c.send(protocol.TypeHello, "h1", protocol.Hello{
+		ClientUUID: uuid, Username: username, Password: password, Protocol: protocol.Version,
+	})
+	env := c.expect(protocol.TypeWelcome)
+	if env.ID != "h1" {
+		t.Fatalf("welcome should echo the request id, got %q", env.ID)
+	}
+	var w protocol.Welcome
+	c.decode(env, &w)
+	return c, w
+}
+
+func TestHandshakeStoresUserAndAnnouncesPresence(t *testing.T) {
+	f := newFixture(t)
+
+	alice, welcome := f.hello(t, uuidA, "Alice", "")
+	if welcome.You.Username != "Alice" || welcome.You.ClientUUID != uuidA {
+		t.Fatalf("unexpected identity in welcome: %+v", welcome.You)
+	}
+	if len(welcome.Users) != 1 {
+		t.Fatalf("expected to see myself in the user list, got %d", len(welcome.Users))
+	}
+	if welcome.ServerUUID != "server-uuid" || welcome.Protocol != protocol.Version {
+		t.Fatalf("unexpected server details: %+v", welcome)
+	}
+
+	// The second client should appear in nobody's welcome but alice's feed.
+	_, welcomeB := f.hello(t, uuidB, "Bob", "")
+	if len(welcomeB.Users) != 2 {
+		t.Fatalf("Bob should see both users, got %d", len(welcomeB.Users))
+	}
+
+	joined := alice.expect(protocol.TypeUserJoined)
+	var user protocol.User
+	alice.decode(joined, &user)
+	if user.Username != "Bob" {
+		t.Fatalf("expected Bob's join, got %+v", user)
+	}
+
+	users, err := f.store.RecentUsers(context.Background(), 10)
+	if err != nil {
+		t.Fatalf("list users: %v", err)
+	}
+	if len(users) != 2 {
+		t.Fatalf("both clients should be persisted, got %d", len(users))
+	}
+}
+
+func TestFirstFrameMustBeHello(t *testing.T) {
+	f := newFixture(t)
+	c := f.dial(t)
+	c.send(protocol.TypePing, "p1", nil)
+
+	env := c.expect(protocol.TypeError)
+	var e protocol.Error
+	c.decode(env, &e)
+	if e.Code != protocol.ErrHandshake {
+		t.Fatalf("expected %s, got %s", protocol.ErrHandshake, e.Code)
+	}
+}
+
+func TestPasswordIsEnforced(t *testing.T) {
+	f := newFixture(t)
+	if err := f.cfg.Set(context.Background(), config.KeyServerPassword, "s3cret"); err != nil {
+		t.Fatalf("set password: %v", err)
+	}
+
+	c := f.dial(t)
+	c.send(protocol.TypeHello, "", protocol.Hello{ClientUUID: uuidA, Username: "Alice", Password: "wrong"})
+	var e protocol.Error
+	c.decode(c.expect(protocol.TypeError), &e)
+	if e.Code != protocol.ErrBadPassword {
+		t.Fatalf("expected %s, got %s", protocol.ErrBadPassword, e.Code)
+	}
+
+	if _, w := f.hello(t, uuidA, "Alice", "s3cret"); w.You.Username != "Alice" {
+		t.Fatalf("correct password should be accepted")
+	}
+}
+
+func TestRejectsBadIdentity(t *testing.T) {
+	cases := []struct {
+		name     string
+		hello    protocol.Hello
+		wantCode string
+	}{
+		{"malformed uuid", protocol.Hello{ClientUUID: "not-a-uuid", Username: "Alice"}, protocol.ErrInvalidUUID},
+		{"short username", protocol.Hello{ClientUUID: uuidA, Username: "a"}, protocol.ErrInvalidUsername},
+		{"blank username", protocol.Hello{ClientUUID: uuidA, Username: "   "}, protocol.ErrInvalidUsername},
+		{"future protocol", protocol.Hello{ClientUUID: uuidA, Username: "Alice", Protocol: 99}, protocol.ErrProtocol},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFixture(t)
+			c := f.dial(t)
+			c.send(protocol.TypeHello, "", tc.hello)
+			var e protocol.Error
+			c.decode(c.expect(protocol.TypeError), &e)
+			if e.Code != tc.wantCode {
+				t.Fatalf("expected %s, got %s (%s)", tc.wantCode, e.Code, e.Message)
+			}
+		})
+	}
+}
+
+func TestUsernameCollisionIsRejectedCaseInsensitively(t *testing.T) {
+	f := newFixture(t)
+	f.hello(t, uuidA, "Alice", "")
+
+	c := f.dial(t)
+	c.send(protocol.TypeHello, "", protocol.Hello{ClientUUID: uuidB, Username: "alice"})
+	var e protocol.Error
+	c.decode(c.expect(protocol.TypeError), &e)
+	if e.Code != protocol.ErrUsernameTaken {
+		t.Fatalf("expected %s, got %s", protocol.ErrUsernameTaken, e.Code)
+	}
+}
+
+func TestServerFullIsRejected(t *testing.T) {
+	f := newFixture(t)
+	if err := f.cfg.Set(context.Background(), config.KeyServerMaxUsers, "1"); err != nil {
+		t.Fatalf("set max users: %v", err)
+	}
+	f.hello(t, uuidA, "Alice", "")
+
+	c := f.dial(t)
+	c.send(protocol.TypeHello, "", protocol.Hello{ClientUUID: uuidB, Username: "Bob"})
+	var e protocol.Error
+	c.decode(c.expect(protocol.TypeError), &e)
+	if e.Code != protocol.ErrServerFull {
+		t.Fatalf("expected %s, got %s", protocol.ErrServerFull, e.Code)
+	}
+}
+
+// A client that reconnects before the server noticed the dead socket must take
+// over its own identity instead of being refused as a duplicate — and the other
+// users should not see a leave/join flicker.
+func TestReconnectWithSameUUIDReplacesOldSession(t *testing.T) {
+	f := newFixture(t)
+	observer, _ := f.hello(t, uuidB, "Observer", "")
+
+	f.hello(t, uuidA, "Alice", "")
+	observer.expect(protocol.TypeUserJoined) // Alice's first connection
+
+	fresh, welcome := f.hello(t, uuidA, "Alice", "")
+	if welcome.You.ClientUUID != uuidA {
+		t.Fatalf("unexpected identity: %+v", welcome.You)
+	}
+	if got := f.sessions.Count(); got != 2 {
+		t.Fatalf("expected 2 online sessions after takeover, got %d", got)
+	}
+
+	// The takeover must be silent for everyone else: the next thing the
+	// observer hears is Alice's rename, not a join or a leave.
+	fresh.send(protocol.TypeRename, "r1", protocol.Rename{Username: "Alice2"})
+	fresh.expect(protocol.TypeUserUpdated)
+
+	env := observer.expect(protocol.TypeUserUpdated)
+	var u protocol.User
+	observer.decode(env, &u)
+	if u.Username != "Alice2" {
+		t.Fatalf("observer got unexpected update: %+v", u)
+	}
+}
+
+func TestRenameIsValidatedAndBroadcast(t *testing.T) {
+	f := newFixture(t)
+	alice, _ := f.hello(t, uuidA, "Alice", "")
+	bob, _ := f.hello(t, uuidB, "Bob", "")
+	alice.expect(protocol.TypeUserJoined)
+
+	alice.send(protocol.TypeRename, "r1", protocol.Rename{Username: "Bob"})
+	var e protocol.Error
+	alice.decode(alice.expect(protocol.TypeError), &e)
+	if e.Code != protocol.ErrUsernameTaken {
+		t.Fatalf("expected %s, got %s", protocol.ErrUsernameTaken, e.Code)
+	}
+
+	alice.send(protocol.TypeRename, "r2", protocol.Rename{Username: "  Ali   Reza "})
+	var me protocol.User
+	alice.decode(alice.expect(protocol.TypeUserUpdated), &me)
+	if me.Username != "Ali Reza" {
+		t.Fatalf("whitespace should be normalized, got %q", me.Username)
+	}
+
+	var seen protocol.User
+	bob.decode(bob.expect(protocol.TypeUserUpdated), &seen)
+	if seen.Username != "Ali Reza" {
+		t.Fatalf("Bob should see the rename, got %q", seen.Username)
+	}
+
+	users, err := f.store.RecentUsers(context.Background(), 10)
+	if err != nil {
+		t.Fatalf("list users: %v", err)
+	}
+	for _, u := range users {
+		if u.ClientUUID == uuidA && u.Username != "Ali Reza" {
+			t.Fatalf("rename should be persisted, stored %q", u.Username)
+		}
+	}
+}
+
+func TestPingAnswersPong(t *testing.T) {
+	f := newFixture(t)
+	c, _ := f.hello(t, uuidA, "Alice", "")
+
+	c.send(protocol.TypePing, "ping-1", nil)
+	env := c.expect(protocol.TypePong)
+	if env.ID != "ping-1" {
+		t.Fatalf("pong should echo the id, got %q", env.ID)
+	}
+}
+
+func TestUnknownFrameIsReportedWithoutClosing(t *testing.T) {
+	f := newFixture(t)
+	c, _ := f.hello(t, uuidA, "Alice", "")
+
+	c.send("does.not.exist", "x1", nil)
+	var e protocol.Error
+	c.decode(c.expect(protocol.TypeError), &e)
+	if e.Code != protocol.ErrBadRequest {
+		t.Fatalf("expected %s, got %s", protocol.ErrBadRequest, e.Code)
+	}
+
+	// The session must survive a bad frame.
+	c.send(protocol.TypePing, "still-here", nil)
+	c.expect(protocol.TypePong)
+}
+
+func TestLeaveIsBroadcastAndPersisted(t *testing.T) {
+	f := newFixture(t)
+	alice, _ := f.hello(t, uuidA, "Alice", "")
+	bob, _ := f.hello(t, uuidB, "Bob", "")
+	alice.expect(protocol.TypeUserJoined)
+
+	bob.conn.Close(websocket.StatusNormalClosure, "bye")
+
+	env := alice.expect(protocol.TypeUserLeft)
+	var left protocol.UserLeft
+	alice.decode(env, &left)
+	if left.ClientUUID != uuidB || left.Username != "Bob" {
+		t.Fatalf("unexpected leave payload: %+v", left)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for f.sessions.Count() != 1 {
+		if time.Now().After(deadline) {
+			t.Fatalf("session was not released, still %d online", f.sessions.Count())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}

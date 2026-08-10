@@ -17,9 +17,10 @@ type Deps struct {
 	Config     *config.Config
 	ServerUUID string
 	StartedAt  time.Time
-	// OnlineUsers reports the current session count. Phase 1 has no session
-	// manager yet, so the wiring supplies a stub.
+	// OnlineUsers reports the current session count.
 	OnlineUsers func() int
+	// Gateway handles the WebSocket upgrade at /ws.
+	Gateway http.Handler
 }
 
 // Handler builds the router.
@@ -50,6 +51,10 @@ func Handler(d Deps) http.Handler {
 			"max_upload_mb":     d.Config.Int(config.KeyUploadsMaxSizeMB),
 		})
 	})
+
+	if d.Gateway != nil {
+		mux.Handle("/ws", d.Gateway)
+	}
 
 	return logRequests(mux)
 }
