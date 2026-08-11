@@ -35,7 +35,7 @@ type Setting struct {
 }
 
 // Sections in the order the admin panel should show them.
-var Sections = []string{"server", "network", "users", "rooms", "uploads", "livekit", "log"}
+var Sections = []string{"server", "network", "users", "rooms", "chat", "uploads", "livekit", "log"}
 
 var registry = buildRegistry(
 	Setting{
@@ -110,6 +110,26 @@ var registry = buildRegistry(
 	},
 
 	Setting{
+		Key: KeyChatMaxMessageLen, Section: "chat", Kind: KindInt, Default: "2000",
+		Title: "حداکثر طول پیام", Help: "تعداد کاراکتر هر پیام متنی.",
+		Validate: intRange(1, 20000),
+	},
+	Setting{
+		Key: KeyChatRatePerMinute, Section: "chat", Kind: KindInt, Default: "30",
+		Title: "سقف پیام در دقیقه", Help: "نرخ پایدار ارسال پیام برای هر کاربر.",
+		Validate: intRange(1, 600),
+	},
+	Setting{
+		Key: KeyChatRateBurst, Section: "chat", Kind: KindInt, Default: "5",
+		Title: "پیام پشت‌سرهم مجاز", Help: "چند پیام بی‌وقفه بعد از یک مکث پذیرفته می‌شود.",
+		Validate: intRange(1, 100),
+	},
+	Setting{
+		Key: KeyChatStickersEnabled, Section: "chat", Kind: KindBool, Default: "true",
+		Title: "فعال بودن استیکر", Help: "اجازهٔ ارسال استیکر در روم‌ها.",
+	},
+
+	Setting{
 		Key: KeyUploadsEnabled, Section: "uploads", Kind: KindBool, Default: "true",
 		Title: "فعال بودن ارسال فایل", Help: "اجازهٔ ارسال فایل و عکس در روم‌ها.",
 	},
@@ -172,6 +192,11 @@ const (
 	KeyRoomsHistoryLimit    = "rooms.history_limit"
 	KeyRoomsPurgeOnEmpty    = "rooms.purge_on_empty"
 	KeyRoomsPurgeGraceSec   = "rooms.purge_grace_sec"
+
+	KeyChatMaxMessageLen   = "chat.max_message_len"
+	KeyChatRatePerMinute   = "chat.rate_per_minute"
+	KeyChatRateBurst       = "chat.rate_burst"
+	KeyChatStickersEnabled = "chat.stickers_enabled"
 
 	KeyUploadsEnabled     = "uploads.enabled"
 	KeyUploadsMaxSizeMB   = "uploads.max_size_mb"

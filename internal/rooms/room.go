@@ -7,6 +7,7 @@
 package rooms
 
 import (
+	"log/slog"
 	"sync"
 	"time"
 
@@ -105,6 +106,23 @@ func (r *Room) View(withMembers bool) protocol.Room {
 		sortUsers(v.Members)
 	}
 	return v
+}
+
+// Broadcast queues a frame for everyone inside the room, optionally skipping
+// one client — normally the person who caused the event, who gets a reply
+// correlated to their request instead.
+func (r *Room) Broadcast(typ string, payload any, exceptUUID string) {
+	frame, err := protocol.Encode(typ, "", payload)
+	if err != nil {
+		slog.Error("encode room broadcast", "type", typ, "room", r.Name(), "err", err)
+		return
+	}
+	for _, s := range r.Members() {
+		if s.ClientUUID == exceptUUID {
+			continue
+		}
+		_ = s.Send(frame)
+	}
 }
 
 // clearContent drops every registered ephemeral store.

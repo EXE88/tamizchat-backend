@@ -13,6 +13,7 @@ import (
 
 	"github.com/coder/websocket"
 
+	"tamizchat/internal/chat"
 	"tamizchat/internal/config"
 	"tamizchat/internal/gateway"
 	"tamizchat/internal/protocol"
@@ -24,6 +25,7 @@ import (
 const (
 	uuidA = "11111111-1111-4111-8111-111111111111"
 	uuidB = "22222222-2222-4222-8222-222222222222"
+	uuidC = "33333333-3333-4333-8333-333333333333"
 )
 
 // TestMain silences the server logs: a failing assertion is easier to find
@@ -43,9 +45,13 @@ type fixture struct {
 }
 
 // togglePolicy stands in for the role system arriving in phase 5.
-type togglePolicy struct{ allowRoomManagement bool }
+type togglePolicy struct {
+	allowRoomManagement bool
+	allowChatModeration bool
+}
 
-func (p *togglePolicy) CanManageRooms(string) bool { return p.allowRoomManagement }
+func (p *togglePolicy) CanManageRooms(string) bool  { return p.allowRoomManagement }
+func (p *togglePolicy) CanModerateChat(string) bool { return p.allowChatModeration }
 
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
@@ -62,14 +68,26 @@ func newFixture(t *testing.T) *fixture {
 		t.Fatalf("load config: %v", err)
 	}
 
+	// Tests send messages back to back far faster than a person would. Rate
+	// limiting is verified deliberately in its own tests, which lower these.
+	for key, value := range map[string]string{
+		config.KeyChatRateBurst:     "100",
+		config.KeyChatRatePerMinute: "600",
+	} {
+		if err := cfg.Set(ctx, key, value); err != nil {
+			t.Fatalf("set %s: %v", key, err)
+		}
+	}
+
 	sessions := session.NewManager(func() int { return cfg.Int(config.KeyServerMaxUsers) })
 	roomMgr, err := rooms.NewManager(ctx, store, cfg, sessions)
 	if err != nil {
 		t.Fatalf("room manager: %v", err)
 	}
 
-	policy := &togglePolicy{allowRoomManagement: true}
-	gw := gateway.New(cfg, sessions, roomMgr, store, policy, "server-uuid")
+	policy := &togglePolicy{allowRoomManagement: true, allowChatModeration: true}
+	chatMgr := chat.NewManager(cfg, roomMgr, policy)
+	gw := gateway.New(cfg, sessions, roomMgr, chatMgr, store, policy, "server-uuid")
 
 	srv := httptest.NewServer(gw)
 	t.Cleanup(srv.Close)

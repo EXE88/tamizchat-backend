@@ -63,8 +63,18 @@ type Manager struct {
 	cfg    *config.Config
 	global Broadcaster
 
-	mu    sync.RWMutex
-	rooms map[string]*Room
+	mu       sync.RWMutex
+	rooms    map[string]*Room
+	onDelete []func(roomID string)
+}
+
+// OnDelete registers a callback fired after a room is removed, so packages that
+// keep per-room state — the chat history, later the uploaded files — can drop
+// theirs instead of leaking it.
+func (m *Manager) OnDelete(fn func(roomID string)) {
+	m.mu.Lock()
+	m.onDelete = append(m.onDelete, fn)
+	m.mu.Unlock()
 }
 
 // NewManager loads the persisted room definitions into memory.
@@ -249,7 +259,12 @@ func (m *Manager) Delete(ctx context.Context, actorUUID, id string) error {
 
 	m.mu.Lock()
 	delete(m.rooms, id)
+	listeners := append([]func(string){}, m.onDelete...)
 	m.mu.Unlock()
+
+	for _, fn := range listeners {
+		fn(id)
+	}
 
 	// Everyone inside is moved out before the room disappears, so no client is
 	// left pointing at a room that no longer exists.

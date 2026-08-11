@@ -39,6 +39,35 @@ func NormalizeName(raw, label string, min, max int) (string, error) {
 	return strings.Join(strings.Fields(name), " "), nil
 }
 
+// NormalizeMessage cleans up a chat message body. Unlike a name, a message may
+// span lines and may legitimately contain bidi marks — mixing Persian with
+// Latin words and numbers is exactly what they are for. Only characters that
+// would corrupt a client's rendering are rejected.
+func NormalizeMessage(raw string, max int) (string, error) {
+	// Normalize line endings first, so a Windows client's \r\n does not count
+	// twice against the length or show up as a stray control character.
+	text := strings.ReplaceAll(raw, "\r\n", "\n")
+	text = strings.ReplaceAll(text, "\r", "\n")
+	text = strings.Trim(text, " \t\n")
+
+	if text == "" {
+		return "", fmt.Errorf("پیام نمی‌تواند خالی باشد")
+	}
+	if n := len([]rune(text)); n > max {
+		return "", fmt.Errorf("پیام باید حداکثر %d کاراکتر باشد (الان %d)", max, n)
+	}
+
+	for _, r := range text {
+		if r == '\n' || r == '\t' {
+			continue
+		}
+		if unicode.IsControl(r) {
+			return "", fmt.Errorf("پیام نباید کاراکتر کنترلی داشته باشد")
+		}
+	}
+	return text, nil
+}
+
 // IsBidiControl matches the LRM/RLM marks, the embedding/override controls and
 // the isolate controls. They are invisible and can make one name render
 // exactly like another.

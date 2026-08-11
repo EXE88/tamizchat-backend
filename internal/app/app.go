@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"tamizchat/internal/authz"
+	"tamizchat/internal/chat"
 	"tamizchat/internal/config"
 	"tamizchat/internal/gateway"
 	"tamizchat/internal/httpapi"
@@ -64,7 +65,10 @@ func Run(ctx context.Context, opts Options) error {
 	}
 
 	// Phase 5 replaces this with the real role and admin system.
-	gw := gateway.New(cfg, sessions, roomMgr, store, authz.OpenPolicy{}, serverUUID)
+	policy := authz.OpenPolicy{}
+	chatMgr := chat.NewManager(cfg, roomMgr, policy)
+
+	gw := gateway.New(cfg, sessions, roomMgr, chatMgr, store, policy, serverUUID)
 
 	handler := httpapi.Handler(httpapi.Deps{
 		Config:      cfg,

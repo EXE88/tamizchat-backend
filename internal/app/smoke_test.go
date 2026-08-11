@@ -103,6 +103,66 @@ func TestServerEndToEnd(t *testing.T) {
 	if welcome.You.Username != "Smoke" {
 		t.Fatalf("unexpected identity: %+v", welcome.You)
 	}
+	if welcome.Limits.MessageMax == 0 {
+		t.Fatal("the client needs the chat limits to validate input locally")
+	}
+
+	// Walk the whole path a real client takes: enter the room, say something,
+	// and read it back out of the history.
+	roomID := welcome.Rooms[0].ID
+	send(t, ctx, conn, protocol.TypeRoomJoin, "j1", protocol.RoomJoin{RoomID: roomID})
+	expect(t, ctx, conn, protocol.TypeRoomJoined, nil)
+
+	send(t, ctx, conn, protocol.TypeChatSend, "c1", protocol.ChatSend{Text: "سلام"})
+	var posted protocol.Message
+	expect(t, ctx, conn, protocol.TypeChatMessage, &posted)
+	if posted.Text != "سلام" || posted.RoomID != roomID {
+		t.Fatalf("unexpected message: %+v", posted)
+	}
+
+	send(t, ctx, conn, protocol.TypeChatHistory, "h1", protocol.ChatHistoryRequest{})
+	var history protocol.ChatHistory
+	expect(t, ctx, conn, protocol.TypeChatHistoryReply, &history)
+	if len(history.Messages) != 1 || history.Messages[0].ID != posted.ID {
+		t.Fatalf("the message should be in the room history, got %+v", history.Messages)
+	}
+}
+
+func send(t *testing.T, ctx context.Context, conn *websocket.Conn, typ, id string, payload any) {
+	t.Helper()
+	frame, err := protocol.Encode(typ, id, payload)
+	if err != nil {
+		t.Fatalf("encode %s: %v", typ, err)
+	}
+	writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if err := conn.Write(writeCtx, websocket.MessageText, frame); err != nil {
+		t.Fatalf("write %s: %v", typ, err)
+	}
+}
+
+// expect reads one frame, asserts its type and decodes it when into is set.
+func expect(t *testing.T, ctx context.Context, conn *websocket.Conn, typ string, into any) {
+	t.Helper()
+	readCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	_, data, err := conn.Read(readCtx)
+	if err != nil {
+		t.Fatalf("read %s: %v", typ, err)
+	}
+
+	var env protocol.Envelope
+	if err := json.Unmarshal(data, &env); err != nil {
+		t.Fatalf("decode envelope: %v", err)
+	}
+	if env.Type != typ {
+		t.Fatalf("expected %q, got %q: %s", typ, env.Type, env.Data)
+	}
+	if into != nil {
+		if err := json.Unmarshal(env.Data, into); err != nil {
+			t.Fatalf("decode %s payload: %v", typ, err)
+		}
+	}
 }
 
 // freeAddr reserves a loopback port and releases it, so the server can bind it.

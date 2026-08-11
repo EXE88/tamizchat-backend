@@ -9,6 +9,10 @@ package authz
 type Policy interface {
 	// CanManageRooms covers creating, editing and deleting rooms.
 	CanManageRooms(clientUUID string) bool
+	// CanModerateChat covers deleting other people's messages. Note that it
+	// does not cover editing them: nobody may put words in another user's
+	// mouth, moderator or not.
+	CanModerateChat(clientUUID string) bool
 }
 
 // OpenPolicy lets every connected user do everything.
@@ -20,3 +24,6 @@ type OpenPolicy struct{}
 
 // CanManageRooms always allows.
 func (OpenPolicy) CanManageRooms(string) bool { return true }
+
+// CanModerateChat always allows.
+func (OpenPolicy) CanModerateChat(string) bool { return true }

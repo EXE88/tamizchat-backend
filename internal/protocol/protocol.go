@@ -33,6 +33,12 @@ const (
 	TypeRoomCreate = "room.create"
 	TypeRoomUpdate = "room.update"
 	TypeRoomDelete = "room.delete"
+
+	TypeChatSend    = "chat.send"
+	TypeChatHistory = "chat.history"
+	TypeChatEdit    = "chat.edit"
+	TypeChatDelete  = "chat.delete"
+	TypeChatTyping  = "chat.typing"
 )
 
 // Frame types sent by the server.
@@ -53,6 +59,12 @@ const (
 	TypeRoomMemberJoined = "room.member_joined"
 	TypeRoomMemberLeft   = "room.member_left"
 	TypeRoomPurged       = "room.purged" // the room emptied and its content was dropped
+
+	TypeChatMessage      = "chat.message" // a new message (reply to chat.send, or a broadcast)
+	TypeChatHistoryReply = "chat.history"
+	TypeChatUpdated      = "chat.updated"
+	TypeChatDeleted      = "chat.deleted"
+	TypeChatTypingEvent  = "chat.typing"
 )
 
 // Error codes. The client shows its own localized text per code, so these
@@ -78,6 +90,10 @@ const (
 	ErrRoomInvalidName = "room_invalid_name"
 	ErrNotInRoom       = "not_in_a_room"
 	ErrForbidden       = "forbidden"
+
+	ErrMessageInvalid   = "message_invalid"
+	ErrMessageNotFound  = "message_not_found"
+	ErrStickersDisabled = "stickers_disabled"
 )
 
 // Reasons a session ends, reported in user.left and in the close frame.
@@ -183,6 +199,77 @@ const (
 	ReasonLeftVoluntarily = "left"
 )
 
+// Message kinds.
+const (
+	MessageText    = "text"
+	MessageSticker = "sticker"
+)
+
+// Message is one chat message. Messages live only in the room's memory: they
+// are gone once the room empties, so there is no permanent id to refer to
+// later — Seq exists purely for ordering and paging within a live room.
+type Message struct {
+	ID        string `json:"id"`
+	Seq       uint64 `json:"seq"`
+	RoomID    string `json:"room_id"`
+	Author    User   `json:"author"`
+	Kind      string `json:"kind"`
+	Text      string `json:"text,omitempty"`
+	StickerID string `json:"sticker_id,omitempty"`
+	CreatedAt int64  `json:"created_at"`
+	EditedAt  int64  `json:"edited_at,omitempty"`
+}
+
+// ChatSend posts a message to the room the sender is currently in. Exactly one
+// of Text or StickerID must be set.
+type ChatSend struct {
+	Text      string `json:"text,omitempty"`
+	StickerID string `json:"sticker_id,omitempty"`
+}
+
+// ChatHistoryRequest asks for the messages a client missed. BeforeSeq pages
+// backwards through the buffer; zero means "from the newest".
+type ChatHistoryRequest struct {
+	BeforeSeq uint64 `json:"before_seq,omitempty"`
+	Limit     int    `json:"limit,omitempty"`
+}
+
+// ChatHistory is the reply, oldest message first.
+type ChatHistory struct {
+	RoomID   string    `json:"room_id"`
+	Messages []Message `json:"messages"`
+	// HasMore reports whether older messages are still in the buffer.
+	HasMore bool `json:"has_more"`
+}
+
+// ChatEdit changes the text of one's own message.
+type ChatEdit struct {
+	MessageID string `json:"message_id"`
+	Text      string `json:"text"`
+}
+
+// ChatDelete removes a message.
+type ChatDelete struct {
+	MessageID string `json:"message_id"`
+}
+
+// ChatDeleted announces a removal.
+type ChatDeleted struct {
+	RoomID    string `json:"room_id"`
+	MessageID string `json:"message_id"`
+	// DeletedBy is set when a moderator removed someone else's message.
+	DeletedBy string `json:"deleted_by,omitempty"`
+}
+
+// ChatTyping reports that someone started or stopped typing. It is never
+// stored: it is a hint that expires on its own.
+type ChatTyping struct {
+	RoomID     string `json:"room_id"`
+	ClientUUID string `json:"client_uuid,omitempty"`
+	Username   string `json:"username,omitempty"`
+	Typing     bool   `json:"typing"`
+}
+
 // Welcome is the server's answer to a successful hello.
 type Welcome struct {
 	SessionID  string     `json:"session_id"`
@@ -200,9 +287,12 @@ type Welcome struct {
 // UserLimits tells the client what the server will accept, so it can validate
 // input before sending it.
 type UserLimits struct {
-	UsernameMin int `json:"username_min"`
-	UsernameMax int `json:"username_max"`
-	MaxUsers    int `json:"max_users"`
+	UsernameMin     int  `json:"username_min"`
+	UsernameMax     int  `json:"username_max"`
+	MaxUsers        int  `json:"max_users"`
+	MessageMax      int  `json:"message_max"`
+	HistoryLimit    int  `json:"history_limit"`
+	StickersEnabled bool `json:"stickers_enabled"`
 }
 
 // Error is the payload of an error frame.

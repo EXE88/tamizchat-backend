@@ -50,7 +50,8 @@
     "heartbeat_sec": 30,
     "you":   { "client_uuid": "…", "username": "دانیال", "joined_at": 1760000000 },
     "users": [ { "client_uuid": "…", "username": "…", "joined_at": 0 } ],
-    "limits": { "username_min": 3, "username_max": 24, "max_users": 200 }
+    "limits": { "username_min": 3, "username_max": 24, "max_users": 200,
+                "message_max": 2000, "history_limit": 500, "stickers_enabled": true }
 }}
 ```
 
@@ -70,6 +71,11 @@
 | `room.create` | `{"name", "password", "capacity"}` | نیازمند مجوز مدیریت روم |
 | `room.update` | `{"room_id", "name"?, "password"?, "capacity"?, "position"?}` | فقط فیلدهای موجود تغییر می‌کنند |
 | `room.delete` | `{"room_id"}` | نیازمند مجوز مدیریت روم |
+| `chat.send` | `{"text"}` یا `{"sticker_id"}` | در روم فعلی؛ دقیقاً یکی از دو فیلد |
+| `chat.history` | `{"before_seq"?, "limit"?}` | صفحه‌بندی به عقب |
+| `chat.edit` | `{"message_id", "text"}` | فقط نویسندهٔ پیام |
+| `chat.delete` | `{"message_id"}` | نویسنده، یا مدیر برای پیام دیگران |
+| `chat.typing` | `{"typing": true}` | بدون پاسخ؛ ذخیره هم نمی‌شود |
 
 `capacity: 0` هنگام ساخت یعنی «از پیش‌فرض سرور استفاده کن».
 
@@ -90,6 +96,11 @@
 | `room.deleted` | `{"room_id"}` |
 | `room.member_joined` / `room.member_left` | `{"room_id", "user", "reason"}` |
 | `room.purged` | `{"room_id"}` — محتوای موقت روم پاک شد |
+| `chat.message` | یک Message — هم پاسخ `chat.send` و هم پخش به بقیهٔ اعضا |
+| `chat.history` | `{"room_id", "messages": [Message], "has_more"}` |
+| `chat.updated` | Message ویرایش‌شده |
+| `chat.deleted` | `{"room_id", "message_id", "deleted_by"?}` |
+| `chat.typing` | `{"room_id", "client_uuid", "username", "typing"}` |
 
 قالب `Room`:
 
@@ -99,6 +110,33 @@
 ```
 
 رمز روم هرگز برای کلاینت فرستاده نمی‌شود؛ فقط `has_password`.
+
+قالب `Message`:
+
+```json
+{ "id": "…", "seq": 12, "room_id": "…",
+  "author": User, "kind": "text",
+  "text": "سلام", "sticker_id": "",
+  "created_at": 1786400000, "edited_at": 0 }
+```
+
+`kind` یا `text` است یا `sticker`. `seq` شمارندهٔ ترتیب داخل همان روم است و
+فقط تا وقتی روم زنده است معنا دارد — برای صفحه‌بندی با `before_seq` از آن
+استفاده کنید. برای دریافت پیام‌های قدیمی‌تر، `seq` قدیمی‌ترین پیامی که دارید
+را در `before_seq` بفرستید؛ `has_more` می‌گوید آیا باز هم چیزی مانده.
+
+نکتهٔ مهم دربارهٔ چت:
+
+- محتوای استیکر سمت کلاینت است؛ سرور فقط `sticker_id` را رد و بدل می‌کند
+  (الگوی مجاز: `[A-Za-z0-9._:-]` تا ۶۴ کاراکتر). بستهٔ استیکر میزبانی‌شده
+  روی سرور به فازهای بعد موکول شده است.
+- ویرایش فقط برای نویسنده است، حتی برای مدیر. مدیر می‌تواند پیام دیگران را
+  **حذف** کند ولی نمی‌تواند حرف در دهان کسی بگذارد.
+- پیام حذف‌شده به‌کلی از حافظه می‌رود (بدون tombstone).
+- ارسال پیام محدود به نرخ است (`chat.rate_per_minute` و `chat.rate_burst`).
+  پیامی که سرور رد می‌کند از سهمیهٔ نرخ کم نمی‌شود.
+- `chat.typing` نه ذخیره می‌شود و نه پاسخ دارد؛ اگر گم شود، تایمر خود کلاینت
+  نشانگر را پاک می‌کند.
 
 ## چرا رویدادهای عضویت روم سرورگسترند
 
@@ -141,6 +179,10 @@
 | `room_invalid_name` | نام یا ظرفیت روم قابل قبول نیست (`message` قابل نمایش است) |
 | `not_in_a_room` | عملیات نیازمند حضور در یک روم است |
 | `forbidden` | مجوز لازم را ندارید |
+| `message_invalid` | متن یا استیکر قابل قبول نیست (`message` قابل نمایش است) |
+| `message_not_found` | پیام دیگر در حافظهٔ روم نیست |
+| `stickers_disabled` | ارسال استیکر در این سرور خاموش است |
+| `rate_limited` | سریع‌تر از حد مجاز پیام فرستاده‌اید |
 
 ## دلایل قطع اتصال (`reason`)
 

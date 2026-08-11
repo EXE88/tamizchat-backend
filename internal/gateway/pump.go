@@ -39,6 +39,7 @@ func (g *Gateway) leave(sess *session.Session) {
 	// Take the user out of their room first, so room members hear the exit
 	// before the server-wide leave arrives.
 	g.rooms.Disconnect(sess)
+	g.chat.Forget(sess.ClientUUID)
 
 	reason := sess.Reason()
 	g.sessions.Broadcast(protocol.TypeUserLeft, protocol.UserLeft{
@@ -103,6 +104,17 @@ func (g *Gateway) dispatch(ctx context.Context, sess *session.Session, data []by
 		g.handleRoomUpdate(ctx, sess, env)
 	case protocol.TypeRoomDelete:
 		g.handleRoomDelete(ctx, sess, env)
+
+	case protocol.TypeChatSend:
+		g.handleChatSend(sess, env)
+	case protocol.TypeChatHistory:
+		g.handleChatHistory(sess, env)
+	case protocol.TypeChatEdit:
+		g.handleChatEdit(sess, env)
+	case protocol.TypeChatDelete:
+		g.handleChatDelete(sess, env)
+	case protocol.TypeChatTyping:
+		g.handleChatTyping(sess, env)
 
 	case protocol.TypeHello:
 		sess.SendError(env.ID, protocol.ErrBadRequest, "hello فقط یک‌بار در ابتدای اتصال پذیرفته می‌شود")

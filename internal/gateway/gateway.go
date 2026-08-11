@@ -15,6 +15,7 @@ import (
 	"github.com/coder/websocket"
 
 	"tamizchat/internal/authz"
+	"tamizchat/internal/chat"
 	"tamizchat/internal/config"
 	"tamizchat/internal/protocol"
 	"tamizchat/internal/rooms"
@@ -45,6 +46,7 @@ type Gateway struct {
 	cfg      *config.Config
 	sessions *session.Manager
 	rooms    *rooms.Manager
+	chat     *chat.Manager
 	users    Users
 	policy   authz.Policy
 	serverID string
@@ -52,11 +54,12 @@ type Gateway struct {
 
 // New builds a gateway.
 func New(cfg *config.Config, sessions *session.Manager, roomMgr *rooms.Manager,
-	users Users, policy authz.Policy, serverUUID string) *Gateway {
+	chatMgr *chat.Manager, users Users, policy authz.Policy, serverUUID string) *Gateway {
 	return &Gateway{
 		cfg:      cfg,
 		sessions: sessions,
 		rooms:    roomMgr,
+		chat:     chatMgr,
 		users:    users,
 		policy:   policy,
 		serverID: serverUUID,
@@ -167,9 +170,12 @@ func (g *Gateway) handshake(ctx context.Context, conn *websocket.Conn, remote st
 		Users:      g.sessions.Users(),
 		Rooms:      g.rooms.Views(),
 		Limits: protocol.UserLimits{
-			UsernameMin: minLen,
-			UsernameMax: maxLen,
-			MaxUsers:    g.cfg.Int(config.KeyServerMaxUsers),
+			UsernameMin:     minLen,
+			UsernameMax:     maxLen,
+			MaxUsers:        g.cfg.Int(config.KeyServerMaxUsers),
+			MessageMax:      g.cfg.Int(config.KeyChatMaxMessageLen),
+			HistoryLimit:    g.cfg.Int(config.KeyRoomsHistoryLimit),
+			StickersEnabled: g.cfg.Bool(config.KeyChatStickersEnabled),
 		},
 	}
 	if err := sess.SendMessage(protocol.TypeWelcome, env.ID, welcome); err != nil {
