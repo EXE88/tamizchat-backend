@@ -289,6 +289,8 @@ func sectionTitle(section string) string {
 		return "روم‌ها"
 	case "chat":
 		return "چت"
+	case "paint":
+		return "تختهٔ نقاشی"
 	case "uploads":
 		return "فایل و عکس"
 	case "livekit":

@@ -104,7 +104,8 @@ func (m *Manager) seed(ctx context.Context) error {
 		ID:   storage.RoleIDDefault,
 		Name: "کاربر",
 		Permissions: uint64(authz.PermSendMessages | authz.PermUploadFiles |
-			authz.PermSpeak | authz.PermPublishVideo | authz.PermShareScreen),
+			authz.PermSpeak | authz.PermPublishVideo | authz.PermShareScreen |
+			authz.PermPaint),
 		Priority:  0,
 		IsDefault: true,
 	}, {

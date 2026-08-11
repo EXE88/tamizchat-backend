@@ -40,6 +40,7 @@ func (g *Gateway) leave(sess *session.Session) {
 	// before the server-wide leave arrives.
 	g.rooms.Disconnect(sess)
 	g.chat.Forget(sess.ClientUUID)
+	g.paint.Forget(sess.ClientUUID)
 
 	reason := sess.Reason()
 	g.sessions.Broadcast(protocol.TypeUserLeft, protocol.UserLeft{
@@ -152,6 +153,19 @@ func (g *Gateway) dispatch(ctx context.Context, sess *session.Session, data []by
 		g.handleMediaToken(sess, env)
 	case protocol.TypeMediaSetState:
 		g.handleMediaSetState(sess, env)
+
+	case protocol.TypePaintBegin:
+		g.handlePaintBegin(sess, env)
+	case protocol.TypePaintAppend:
+		g.handlePaintAppend(sess, env)
+	case protocol.TypePaintEnd:
+		g.handlePaintEnd(sess, env)
+	case protocol.TypePaintUndo:
+		g.handlePaintUndo(sess, env)
+	case protocol.TypePaintClear:
+		g.handlePaintClear(sess, env)
+	case protocol.TypePaintState:
+		g.handlePaintState(sess, env)
 
 	case protocol.TypeHello:
 		sess.SendError(env.ID, protocol.ErrBadRequest, "hello فقط یک‌بار در ابتدای اتصال پذیرفته می‌شود")

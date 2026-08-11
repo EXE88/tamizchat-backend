@@ -35,7 +35,7 @@ type Setting struct {
 }
 
 // Sections in the order the admin panel should show them.
-var Sections = []string{"server", "network", "users", "rooms", "chat", "uploads", "livekit", "log"}
+var Sections = []string{"server", "network", "users", "rooms", "chat", "uploads", "paint", "livekit", "log"}
 
 var registry = buildRegistry(
 	Setting{
@@ -160,6 +160,26 @@ var registry = buildRegistry(
 	},
 
 	Setting{
+		Key: KeyPaintEnabled, Section: "paint", Kind: KindBool, Default: "true",
+		Title: "فعال بودن تختهٔ نقاشی", Help: "اجازهٔ نقاشی مشترک در روم‌ها.",
+	},
+	Setting{
+		Key: KeyPaintMaxStrokes, Section: "paint", Kind: KindInt, Default: "2000",
+		Title: "حداکثر تعداد خط در تخته", Help: "پس از پر شدن، تخته باید پاک شود تا بشود ادامه داد.",
+		Validate: intRange(10, 100000),
+	},
+	Setting{
+		Key: KeyPaintRatePerSecond, Section: "paint", Kind: KindInt, Default: "40",
+		Title: "سقف پیام نقاشی در ثانیه", Help: "نرخ پایدار ارسال نقطه‌های نقاشی برای هر کاربر.",
+		Validate: intRange(1, 500),
+	},
+	Setting{
+		Key: KeyPaintRateBurst, Section: "paint", Kind: KindInt, Default: "80",
+		Title: "پیام نقاشی پشت‌سرهم مجاز", Help: "برای اینکه شروع یک خط سریع، بریده‌بریده نشود.",
+		Validate: intRange(1, 1000),
+	},
+
+	Setting{
 		Key: KeyLiveKitEnabled, Section: "livekit", Kind: KindBool, Default: "false",
 		Title: "فعال بودن ویس/ویدیو", Help: "تا وقتی LiveKit تنظیم نشده، خاموش بماند.",
 	},
@@ -214,6 +234,11 @@ const (
 	KeyUploadsDir         = "uploads.dir"
 	KeyUploadsTokenTTLSec = "uploads.token_ttl_sec"
 	KeyUploadsThumbMaxPx  = "uploads.thumb_max_px"
+
+	KeyPaintEnabled       = "paint.enabled"
+	KeyPaintMaxStrokes    = "paint.max_strokes"
+	KeyPaintRatePerSecond = "paint.rate_per_second"
+	KeyPaintRateBurst     = "paint.rate_burst"
 
 	KeyLiveKitEnabled   = "livekit.enabled"
 	KeyLiveKitURL       = "livekit.url"

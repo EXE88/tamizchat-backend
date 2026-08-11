@@ -19,6 +19,7 @@ import (
 	"tamizchat/internal/httpapi"
 	"tamizchat/internal/logging"
 	"tamizchat/internal/media"
+	"tamizchat/internal/paint"
 	"tamizchat/internal/protocol"
 	"tamizchat/internal/rooms"
 	"tamizchat/internal/session"
@@ -82,7 +83,10 @@ func Run(ctx context.Context, opts Options) error {
 	roomMgr.OnMemberLeft(mediaMgr.Disconnect)
 	roomMgr.OnDelete(mediaMgr.CloseRoom)
 
-	gw := gateway.New(cfg, sessions, roomMgr, chatMgr, fileMgr, mediaMgr, accessMgr, store, serverUUID)
+	paintMgr := paint.NewManager(cfg, roomMgr, accessMgr, accessMgr)
+
+	gw := gateway.New(cfg, sessions, roomMgr, chatMgr, fileMgr, mediaMgr,
+		paintMgr, accessMgr, store, serverUUID)
 
 	handler := httpapi.Handler(httpapi.Deps{
 		Config:      cfg,

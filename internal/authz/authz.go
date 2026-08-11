@@ -27,6 +27,7 @@ const (
 	PermSpeak
 	PermPublishVideo
 	PermShareScreen
+	PermPaint
 )
 
 // Descriptor documents one permission for the admin panel and the client.
@@ -51,6 +52,7 @@ var All = []Descriptor{
 	{PermSpeak, "speak", "صحبت کردن با میکروفون"},
 	{PermPublishVideo, "publish_video", "روشن کردن دوربین"},
 	{PermShareScreen, "share_screen", "اشتراک صفحه"},
+	{PermPaint, "paint", "نقاشی روی تخته"},
 	{PermManageRoles, "manage_roles", "مدیریت رول‌ها و انتساب آن‌ها"},
 	{PermControlBots, "control_bots", "کنترل بات‌ها"},
 }

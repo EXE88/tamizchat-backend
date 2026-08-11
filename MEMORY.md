@@ -3,7 +3,7 @@
 این فایل حافظهٔ بین‌چتی است. در شروع هر گفتگوی جدید اول این فایل را بخوان،
 و در پایان هر کار «وضعیت فعلی» و «تصمیم‌ها» را به‌روزرسانی کن.
 
-آخرین به‌روزرسانی: ۱۴۰۵/۰۵/۲۰ (2026-08-11) — پایان فاز ۷
+آخرین به‌روزرسانی: ۱۴۰۵/۰۵/۲۰ (2026-08-11) — پایان فاز ۸
 
 ---
 
@@ -51,7 +51,7 @@ voice changer، پخش صدای مخصوص هنگام kick، پخش صدای م�
 
 ## وضعیت فعلی
 
-**فازهای ۱ تا ۷ تمام شدند و تست دارند** (۱۳۹ تست، همه سبز).
+**فازهای ۱ تا ۸ تمام شدند و تست دارند** (۱۶۲ تست، همه سبز).
 جزئیات فازها در [docs/ROADMAP.md](docs/ROADMAP.md) و قرارداد سیم در
 [docs/PROTOCOL.md](docs/PROTOCOL.md).
 
@@ -62,7 +62,7 @@ backend/
   internal/config/schema.go      رجیستری تایپ‌دار تنظیمات (منبع حقیقت پنل)
   internal/config/config.go      نمای زندهٔ کانفیگ + Set/Reset/Watch
   internal/storage/store.go      باز کردن SQLite با WAL
-  internal/storage/migrations.go مهاجرت‌های forward-only (۰۰۰۱ تا ۰۰۰۶)
+  internal/storage/migrations.go مهاجرت‌های forward-only (۰۰۰۱ تا ۰۰۰۷)
   internal/storage/settings.go   settings + server_uuid + NewUUID
   internal/storage/users.go      جدول users: اولین/آخرین حضور، تعداد بازدید
   internal/storage/rooms.go      CRUD تعریف دائمی روم‌ها
@@ -84,6 +84,8 @@ backend/
   internal/media/token.go        امضای JWT لایوکیت + گرنت‌ها
   internal/media/client.go       کلاینت Twirp برای RoomService لایوکیت
   internal/media/manager.go      صدور توکن و اعمال مدیریت روی مدیا
+  internal/paint/board.go        تختهٔ هر روم (پیاده‌سازی Ephemeral)
+  internal/paint/manager.go      begin/append/end، undo، clear، نرخ
   internal/authz/                بیت‌مسک مجوزها + اینترفیس Policy
   internal/access/               رول‌ها، مجوزها، بن و میوت — همه در حافظه
   internal/gateway/gateway.go    upgrade + handshake
@@ -94,6 +96,7 @@ backend/
   internal/gateway/roles.go      CRUD رول و انتساب، محاسبهٔ مجوزهای کاربر
   internal/gateway/files.go      تیکت آپلود و لینک دانلود روی سوکت
   internal/gateway/media.go      توکن مدیا و وضعیت میکروفون/دوربین
+  internal/gateway/paint.go      هندلرهای paint.* و نگاشت خطاها
   internal/httpapi/files.go      POST /api/v1/upload و GET /api/v1/file/{id}
   internal/panel/access.go       رول‌ها، بن‌ها و لاگ در پنل
   internal/httpapi/              /healthz و /api/v1/server-info و /ws
@@ -226,11 +229,30 @@ backend/
 - `rooms.Manager.OnMemberLeft` قلاب مرکزی خروج از روم است (خروج عادی، تعویض
   روم، جابه‌جایی توسط ادمین، قطع اتصال). فازهای بعدی هم از همین استفاده کنند.
 
+### قواعد مهمی که در فاز ۸ تثبیت شد
+
+- **خط‌ها جریانی‌اند** (begin/append/end). نقاشی باید همان‌طور که کشیده
+  می‌شود دیده شود؛ فرستادن خط کامل بعد از برداشتن ماوس حس محصول را خراب
+  می‌کند.
+- `paint.append` عمداً **پاسخ ندارد** — پرتکرارترین پیام کل سیستم است و
+  کلاینت نقطه را محلی کشیده. فقط خطاها فریم می‌گیرند.
+- مختصات **نرمال‌شده ۰..۱** هستند، نه پیکسل، وگرنه نقاشی روی رزولوشن دیگر
+  جابه‌جا می‌افتد. سرور NaN و بی‌نهایت را دور می‌ریزد — یک کلاینت خراب نباید
+  رندر بقیه را به هم بریزد.
+- تختهٔ پر، خط جدید را **رد می‌کند** و قدیمی‌ترها را دور نمی‌ریزد. برخلاف چت
+  (که بافر حلقوی دارد)، پاک‌کردن نامحسوس ابتدای یک نقاشی بدتر از خطا دادن است.
+- `clear` با دامنهٔ `all` مجوز `moderate_chat` می‌خواهد چون کار دیگران را
+  نابود می‌کند؛ `mine` برای همه آزاد است.
+- کاربر میوت‌شده نمی‌تواند نقاشی کند (همان منطق: خط‌خطی‌کردن = داد زدن).
+- الگوی «مجوز جدید = بیت جدید + مهاجرت» دوباره اجرا شد (مهاجرت ۰۰۰۷). این
+  دیگر روال ثابت است.
+
 ## قدم بعدی
 
-فاز ۸: Paint board بلادرنگ — کانال رویداد نقاشی در روم (stroke/clear/undo)،
-نگهداری بوم در حافظهٔ روم و ارسال وضعیت اولیه به تازه‌واردها، سقف تعداد stroke.
-بوم هم باید خودش را به‌عنوان `rooms.Ephemeral` ثبت کند.
+فاز ۹: بات‌ها — جدول `bots`، بات موسیقی با پیمایش فولدر و صف پخش، انتشار صدا
+در LiveKit به‌عنوان یک شرکت‌کنندهٔ معمولی، API کنترل (play/pause/next/prev/
+stop/volume) برای پنل کوچک کنار پروفایل، چند بات هم‌زمان، و افزودن/حذف از
+پنل مدیریت.
 
 ## قواعد کار
 

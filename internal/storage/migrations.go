@@ -141,6 +141,14 @@ ALTER TABLE rooms ADD COLUMN required_role_id TEXT NOT NULL DEFAULT '';`,
 UPDATE roles SET permissions = permissions | 28672
 WHERE id IN ('role-default', 'role-admin');`,
 	},
+	{
+		// Phase 8 added the paint permission (32768). Same story as 0006:
+		// a role that predates the bit would silently lose the whiteboard.
+		name: "0007_paint_permission",
+		stmt: `
+UPDATE roles SET permissions = permissions | 32768
+WHERE id IN ('role-default', 'role-admin');`,
+	},
 }
 
 func (s *Store) migrate(ctx context.Context) error {

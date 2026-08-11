@@ -59,6 +59,13 @@ const (
 
 	TypeMediaToken    = "media.token"
 	TypeMediaSetState = "media.set_state"
+
+	TypePaintBegin  = "paint.begin"
+	TypePaintAppend = "paint.append"
+	TypePaintEnd    = "paint.end"
+	TypePaintUndo   = "paint.undo"
+	TypePaintClear  = "paint.clear"
+	TypePaintState  = "paint.state"
 )
 
 // Frame types sent by the server.
@@ -103,6 +110,13 @@ const (
 
 	TypeMediaCredentials = "media.token"
 	TypeMediaState       = "media.state"
+
+	TypePaintStarted  = "paint.begin"
+	TypePaintAppended = "paint.append"
+	TypePaintEnded    = "paint.end"
+	TypePaintUndone   = "paint.undo"
+	TypePaintCleared  = "paint.clear"
+	TypePaintSnapshot = "paint.state"
 )
 
 // Error codes. The client shows its own localized text per code, so these
@@ -150,6 +164,11 @@ const (
 	ErrFileInvalid     = "file_invalid"
 
 	ErrMediaDisabled = "media_disabled"
+
+	ErrPaintDisabled = "paint_disabled"
+	ErrPaintFull     = "paint_board_full"
+	ErrPaintNotFound = "paint_stroke_not_found"
+	ErrPaintInvalid  = "paint_invalid"
 )
 
 // Reasons a session ends, reported in user.left and in the close frame.
@@ -403,6 +422,86 @@ type FileDownloadRequest struct {
 	FileID string `json:"file_id"`
 }
 
+// Paint tools.
+const (
+	ToolPen     = "pen"
+	ToolEraser  = "eraser"
+	ToolLine    = "line"
+	ToolRect    = "rect"
+	ToolEllipse = "ellipse"
+)
+
+// Point is a position on the board in normalized coordinates: 0..1 on both
+// axes, so a drawing looks the same on every window size.
+type Point struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+}
+
+// Stroke is one continuous mark on the board.
+type Stroke struct {
+	ID     string  `json:"id"`
+	Seq    uint64  `json:"seq"`
+	RoomID string  `json:"room_id,omitempty"`
+	Author string  `json:"author"` // client uuid
+	Tool   string  `json:"tool"`
+	Color  string  `json:"color"`
+	Width  float64 `json:"width"`
+	Points []Point `json:"points"`
+	Done   bool    `json:"done"`
+}
+
+// PaintBegin starts a stroke. The first points may come with it, so a quick
+// flick of the mouse is not split into two round trips.
+type PaintBegin struct {
+	Tool   string  `json:"tool"`
+	Color  string  `json:"color"`
+	Width  float64 `json:"width"`
+	Points []Point `json:"points,omitempty"`
+}
+
+// PaintAppend adds points to a stroke that is still being drawn.
+type PaintAppend struct {
+	StrokeID string  `json:"stroke_id"`
+	Points   []Point `json:"points"`
+}
+
+// PaintEnd finishes a stroke.
+type PaintEnd struct {
+	StrokeID string `json:"stroke_id"`
+}
+
+// PaintUndo removes the caller's most recent stroke.
+type PaintUndo struct {
+	StrokeID string `json:"stroke_id"`
+	RoomID   string `json:"room_id,omitempty"`
+}
+
+// Paint clear scopes.
+const (
+	ClearMine = "mine" // only the caller's own strokes
+	ClearAll  = "all"  // the whole board; needs moderation rights
+)
+
+// PaintClear wipes strokes off the board.
+type PaintClear struct {
+	Scope string `json:"scope"`
+}
+
+// PaintCleared announces a wipe.
+type PaintCleared struct {
+	RoomID string `json:"room_id"`
+	Scope  string `json:"scope"`
+	By     string `json:"by"`
+}
+
+// PaintState is the whole board, sent to a client that just opened it.
+type PaintState struct {
+	RoomID     string   `json:"room_id"`
+	Strokes    []Stroke `json:"strokes"`
+	MaxStrokes int      `json:"max_strokes"`
+}
+
 // MediaToken is everything a client needs to join the room's LiveKit session.
 // The can_* flags mirror what the token actually grants, so the client can grey
 // out a control instead of trying and being refused by LiveKit.
@@ -537,6 +636,7 @@ type UserLimits struct {
 	HistoryLimit    int  `json:"history_limit"`
 	StickersEnabled bool `json:"stickers_enabled"`
 	MediaEnabled    bool `json:"media_enabled"`
+	PaintEnabled    bool `json:"paint_enabled"`
 }
 
 // Error is the payload of an error frame.

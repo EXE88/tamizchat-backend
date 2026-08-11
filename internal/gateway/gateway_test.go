@@ -21,6 +21,7 @@ import (
 	"tamizchat/internal/gateway"
 	"tamizchat/internal/httpapi"
 	"tamizchat/internal/media"
+	"tamizchat/internal/paint"
 	"tamizchat/internal/protocol"
 	"tamizchat/internal/rooms"
 	"tamizchat/internal/session"
@@ -49,6 +50,7 @@ type fixture struct {
 	rooms    *rooms.Manager
 	access   *access.Manager
 	files    *files.Manager
+	paint    *paint.Manager
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -102,7 +104,10 @@ func newFixture(t *testing.T) *fixture {
 	roomMgr.OnMemberLeft(mediaMgr.Disconnect)
 	roomMgr.OnDelete(mediaMgr.CloseRoom)
 
-	gw := gateway.New(cfg, sessions, roomMgr, chatMgr, fileMgr, mediaMgr, accessMgr, store, "server-uuid")
+	paintMgr := paint.NewManager(cfg, roomMgr, accessMgr, accessMgr)
+
+	gw := gateway.New(cfg, sessions, roomMgr, chatMgr, fileMgr, mediaMgr,
+		paintMgr, accessMgr, store, "server-uuid")
 
 	// The tests drive the real HTTP surface, so the upload and download routes
 	// are exercised exactly as a client would reach them.
@@ -121,7 +126,7 @@ func newFixture(t *testing.T) *fixture {
 	t.Cleanup(srv.Close)
 
 	f := &fixture{srv: srv, httpURL: srv.URL, cfg: cfg, store: store, sessions: sessions,
-		rooms: roomMgr, access: accessMgr, files: fileMgr}
+		rooms: roomMgr, access: accessMgr, files: fileMgr, paint: paintMgr}
 
 	// uuidA is the fixture's administrator. Most tests need someone who can
 	// create rooms; the tests about permissions use the other identities,

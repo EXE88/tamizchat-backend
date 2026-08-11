@@ -20,6 +20,7 @@ import (
 	"tamizchat/internal/config"
 	"tamizchat/internal/files"
 	"tamizchat/internal/media"
+	"tamizchat/internal/paint"
 	"tamizchat/internal/protocol"
 	"tamizchat/internal/rooms"
 	"tamizchat/internal/session"
@@ -52,6 +53,7 @@ type Gateway struct {
 	chat     *chat.Manager
 	files    *files.Manager
 	media    *media.Manager
+	paint    *paint.Manager
 	access   *access.Manager
 	users    Users
 	policy   authz.Policy
@@ -62,7 +64,8 @@ type Gateway struct {
 // permission policy, so there is a single source of truth for who may do what.
 func New(cfg *config.Config, sessions *session.Manager, roomMgr *rooms.Manager,
 	chatMgr *chat.Manager, fileMgr *files.Manager, mediaMgr *media.Manager,
-	accessMgr *access.Manager, users Users, serverUUID string) *Gateway {
+	paintMgr *paint.Manager, accessMgr *access.Manager, users Users,
+	serverUUID string) *Gateway {
 	return &Gateway{
 		cfg:      cfg,
 		sessions: sessions,
@@ -70,6 +73,7 @@ func New(cfg *config.Config, sessions *session.Manager, roomMgr *rooms.Manager,
 		chat:     chatMgr,
 		files:    fileMgr,
 		media:    mediaMgr,
+		paint:    paintMgr,
 		access:   accessMgr,
 		users:    users,
 		policy:   accessMgr,
@@ -198,6 +202,7 @@ func (g *Gateway) handshake(ctx context.Context, conn *websocket.Conn, remote st
 			HistoryLimit:    g.cfg.Int(config.KeyRoomsHistoryLimit),
 			StickersEnabled: g.cfg.Bool(config.KeyChatStickersEnabled),
 			MediaEnabled:    g.media.Enabled(),
+			PaintEnabled:    g.cfg.Bool(config.KeyPaintEnabled),
 		},
 		Permissions: authz.Keys(g.permissionsOf(clientUUID)),
 	}
