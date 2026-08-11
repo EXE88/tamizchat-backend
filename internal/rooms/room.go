@@ -91,13 +91,14 @@ func (r *Room) View(withMembers bool) protocol.Room {
 	defer r.mu.RUnlock()
 
 	v := protocol.Room{
-		ID:          r.def.ID,
-		Name:        r.def.Name,
-		HasPassword: r.def.Password != "",
-		Capacity:    r.def.Capacity,
-		Position:    r.def.Position,
-		MemberCount: len(r.members),
-		Members:     []protocol.User{},
+		ID:             r.def.ID,
+		Name:           r.def.Name,
+		HasPassword:    r.def.Password != "",
+		Capacity:       r.def.Capacity,
+		Position:       r.def.Position,
+		RequiredRoleID: r.def.RequiredRoleID,
+		MemberCount:    len(r.members),
+		Members:        []protocol.User{},
 	}
 	if withMembers {
 		for _, s := range r.members {

@@ -17,21 +17,24 @@ var ErrRoomNameTaken = errors.New("room name already used")
 // Room is the persistent definition of a room. What happens inside it is not
 // stored anywhere.
 type Room struct {
-	ID        string
-	Name      string
-	Password  string // empty means the room is open
-	Capacity  int
-	Position  int // display order in the client's room list
-	CreatedAt int64
-	UpdatedAt int64
+	ID       string
+	Name     string
+	Password string // empty means the room is open
+	Capacity int
+	Position int // display order in the client's room list
+	// RequiredRoleID restricts entry to holders of one role. Empty means the
+	// room is open to everyone who knows the password (if any).
+	RequiredRoleID string
+	CreatedAt      int64
+	UpdatedAt      int64
 }
 
 // CreateRoom inserts a room definition.
 func (s *Store) CreateRoom(ctx context.Context, r Room) error {
 	_, err := s.db.ExecContext(ctx, `
-INSERT INTO rooms (id, name, password, capacity, position, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, unixepoch(), unixepoch())`,
-		r.ID, r.Name, r.Password, r.Capacity, r.Position)
+INSERT INTO rooms (id, name, password, capacity, position, required_role_id, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, unixepoch(), unixepoch())`,
+		r.ID, r.Name, r.Password, r.Capacity, r.Position, r.RequiredRoleID)
 	if isUniqueViolation(err) {
 		return ErrRoomNameTaken
 	}
@@ -44,8 +47,9 @@ VALUES (?, ?, ?, ?, ?, unixepoch(), unixepoch())`,
 // UpdateRoom overwrites the editable fields of an existing room.
 func (s *Store) UpdateRoom(ctx context.Context, r Room) error {
 	res, err := s.db.ExecContext(ctx, `
-UPDATE rooms SET name = ?, password = ?, capacity = ?, position = ?, updated_at = unixepoch()
-WHERE id = ?`, r.Name, r.Password, r.Capacity, r.Position, r.ID)
+UPDATE rooms SET name = ?, password = ?, capacity = ?, position = ?,
+	required_role_id = ?, updated_at = unixepoch()
+WHERE id = ?`, r.Name, r.Password, r.Capacity, r.Position, r.RequiredRoleID, r.ID)
 	if isUniqueViolation(err) {
 		return ErrRoomNameTaken
 	}
@@ -74,9 +78,10 @@ func (s *Store) DeleteRoom(ctx context.Context, id string) error {
 func (s *Store) GetRoom(ctx context.Context, id string) (Room, error) {
 	var r Room
 	err := s.db.QueryRowContext(ctx, `
-SELECT id, name, password, capacity, position, created_at, updated_at
+SELECT id, name, password, capacity, position, required_role_id, created_at, updated_at
 FROM rooms WHERE id = ?`, id).
-		Scan(&r.ID, &r.Name, &r.Password, &r.Capacity, &r.Position, &r.CreatedAt, &r.UpdatedAt)
+		Scan(&r.ID, &r.Name, &r.Password, &r.Capacity, &r.Position, &r.RequiredRoleID,
+			&r.CreatedAt, &r.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Room{}, ErrRoomNotFound
 	}
@@ -89,7 +94,7 @@ FROM rooms WHERE id = ?`, id).
 // ListRooms returns every room in display order.
 func (s *Store) ListRooms(ctx context.Context) ([]Room, error) {
 	rows, err := s.db.QueryContext(ctx, `
-SELECT id, name, password, capacity, position, created_at, updated_at
+SELECT id, name, password, capacity, position, required_role_id, created_at, updated_at
 FROM rooms ORDER BY position, created_at`)
 	if err != nil {
 		return nil, fmt.Errorf("list rooms: %w", err)
@@ -99,8 +104,8 @@ FROM rooms ORDER BY position, created_at`)
 	var out []Room
 	for rows.Next() {
 		var r Room
-		if err := rows.Scan(&r.ID, &r.Name, &r.Password, &r.Capacity,
-			&r.Position, &r.CreatedAt, &r.UpdatedAt); err != nil {
+		if err := rows.Scan(&r.ID, &r.Name, &r.Password, &r.Capacity, &r.Position,
+			&r.RequiredRoleID, &r.CreatedAt, &r.UpdatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, r)

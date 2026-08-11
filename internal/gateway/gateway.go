@@ -14,6 +14,7 @@ import (
 
 	"github.com/coder/websocket"
 
+	"tamizchat/internal/access"
 	"tamizchat/internal/authz"
 	"tamizchat/internal/chat"
 	"tamizchat/internal/config"
@@ -47,21 +48,24 @@ type Gateway struct {
 	sessions *session.Manager
 	rooms    *rooms.Manager
 	chat     *chat.Manager
+	access   *access.Manager
 	users    Users
 	policy   authz.Policy
 	serverID string
 }
 
-// New builds a gateway.
+// New builds a gateway. The access manager is both the role store and the
+// permission policy, so there is a single source of truth for who may do what.
 func New(cfg *config.Config, sessions *session.Manager, roomMgr *rooms.Manager,
-	chatMgr *chat.Manager, users Users, policy authz.Policy, serverUUID string) *Gateway {
+	chatMgr *chat.Manager, accessMgr *access.Manager, users Users, serverUUID string) *Gateway {
 	return &Gateway{
 		cfg:      cfg,
 		sessions: sessions,
 		rooms:    roomMgr,
 		chat:     chatMgr,
+		access:   accessMgr,
 		users:    users,
-		policy:   policy,
+		policy:   accessMgr,
 		serverID: serverUUID,
 	}
 }
@@ -130,6 +134,14 @@ func (g *Gateway) handshake(ctx context.Context, conn *websocket.Conn, remote st
 		return nil, g.reject(conn, env.ID, protocol.ErrInvalidUsername, err.Error())
 	}
 
+	if ban, banned := g.access.BanOf(clientUUID); banned {
+		message := "شما از این سرور بن شده‌اید"
+		if ban.Reason != "" {
+			message += ": " + ban.Reason
+		}
+		return nil, g.reject(conn, env.ID, protocol.ErrBanned, message)
+	}
+
 	if want := g.cfg.String(config.KeyServerPassword); want != "" {
 		if subtle.ConstantTimeCompare([]byte(want), []byte(hello.Password)) != 1 {
 			return nil, g.reject(conn, env.ID, protocol.ErrBadPassword, "رمز سرور نادرست است")
@@ -142,6 +154,7 @@ func (g *Gateway) handshake(ctx context.Context, conn *websocket.Conn, remote st
 	}
 
 	sess := session.New(storage.NewUUID(), clientUUID, username, remote)
+	g.applyRoles(sess)
 	replaced, err := g.sessions.Add(sess)
 	if errors.Is(err, session.ErrServerFull) {
 		return nil, g.reject(conn, env.ID, protocol.ErrServerFull, "ظرفیت سرور تکمیل است")
@@ -169,6 +182,7 @@ func (g *Gateway) handshake(ctx context.Context, conn *websocket.Conn, remote st
 		You:        sess.User(),
 		Users:      g.sessions.Users(),
 		Rooms:      g.rooms.Views(),
+		Roles:      g.roleViews(),
 		Limits: protocol.UserLimits{
 			UsernameMin:     minLen,
 			UsernameMax:     maxLen,
@@ -177,6 +191,7 @@ func (g *Gateway) handshake(ctx context.Context, conn *websocket.Conn, remote st
 			HistoryLimit:    g.cfg.Int(config.KeyRoomsHistoryLimit),
 			StickersEnabled: g.cfg.Bool(config.KeyChatStickersEnabled),
 		},
+		Permissions: authz.Keys(g.permissionsOf(clientUUID)),
 	}
 	if err := sess.SendMessage(protocol.TypeWelcome, env.ID, welcome); err != nil {
 		g.sessions.Remove(sess)
@@ -212,4 +227,17 @@ func closeWith(conn *websocket.Conn, status websocket.StatusCode, reason string)
 	// The close reason is capped at 123 bytes by the protocol; our codes are
 	// short ASCII identifiers, so they always fit.
 	_ = conn.Close(status, reason)
+}
+
+// shutSocket ends a connection the server decided to end — a kick, a ban, a
+// shutdown — and does not wait for the peer to agree.
+//
+// The polite close handshake blocks until the client answers with its own close
+// frame, and a client that was just kicked has every reason to stop reading. A
+// session left waiting on that would stay "online" for seconds after being told
+// to go, and would still hold its room slot. The reason has already been
+// delivered as an ordinary frame (user.kicked, user.banned, an error), so the
+// close frame carries no information the client has not already received.
+func shutSocket(conn *websocket.Conn) {
+	conn.CloseNow()
 }

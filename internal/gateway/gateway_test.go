@@ -13,6 +13,7 @@ import (
 
 	"github.com/coder/websocket"
 
+	"tamizchat/internal/access"
 	"tamizchat/internal/chat"
 	"tamizchat/internal/config"
 	"tamizchat/internal/gateway"
@@ -41,17 +42,8 @@ type fixture struct {
 	store    *storage.Store
 	sessions *session.Manager
 	rooms    *rooms.Manager
-	policy   *togglePolicy
+	access   *access.Manager
 }
-
-// togglePolicy stands in for the role system arriving in phase 5.
-type togglePolicy struct {
-	allowRoomManagement bool
-	allowChatModeration bool
-}
-
-func (p *togglePolicy) CanManageRooms(string) bool  { return p.allowRoomManagement }
-func (p *togglePolicy) CanModerateChat(string) bool { return p.allowChatModeration }
 
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
@@ -79,20 +71,40 @@ func newFixture(t *testing.T) *fixture {
 		}
 	}
 
+	accessMgr, err := access.New(ctx, store)
+	if err != nil {
+		t.Fatalf("access manager: %v", err)
+	}
+
 	sessions := session.NewManager(func() int { return cfg.Int(config.KeyServerMaxUsers) })
-	roomMgr, err := rooms.NewManager(ctx, store, cfg, sessions)
+	roomMgr, err := rooms.NewManager(ctx, store, cfg, sessions, accessMgr)
 	if err != nil {
 		t.Fatalf("room manager: %v", err)
 	}
 
-	policy := &togglePolicy{allowRoomManagement: true, allowChatModeration: true}
-	chatMgr := chat.NewManager(cfg, roomMgr, policy)
-	gw := gateway.New(cfg, sessions, roomMgr, chatMgr, store, policy, "server-uuid")
+	chatMgr := chat.NewManager(cfg, roomMgr, accessMgr, accessMgr)
+	gw := gateway.New(cfg, sessions, roomMgr, chatMgr, accessMgr, store, "server-uuid")
 
 	srv := httptest.NewServer(gw)
 	t.Cleanup(srv.Close)
 
-	return &fixture{srv: srv, cfg: cfg, store: store, sessions: sessions, rooms: roomMgr, policy: policy}
+	f := &fixture{srv: srv, cfg: cfg, store: store, sessions: sessions,
+		rooms: roomMgr, access: accessMgr}
+
+	// uuidA is the fixture's administrator. Most tests need someone who can
+	// create rooms; the tests about permissions use the other identities,
+	// which hold only the default role.
+	f.makeAdmin(t, uuidA)
+	return f
+}
+
+// makeAdmin grants the built-in admin role, the way an operator would from
+// the panel.
+func (f *fixture) makeAdmin(t *testing.T, clientUUID string) {
+	t.Helper()
+	if err := f.access.Grant(context.Background(), "", clientUUID, storage.RoleIDAdmin); err != nil {
+		t.Fatalf("grant admin role: %v", err)
+	}
 }
 
 type client struct {

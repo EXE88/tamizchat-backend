@@ -23,6 +23,8 @@ var (
 	ErrRateLimited      = errors.New("too many messages")
 	ErrForbidden        = errors.New("not allowed")
 	ErrStickersDisabled = errors.New("stickers are disabled")
+	ErrMuted            = errors.New("user is muted")
+	ErrNotAllowed       = errors.New("missing permission")
 )
 
 // ValidationError carries a message meant to be shown to the user as-is.
@@ -51,11 +53,17 @@ const (
 	typingPerSecond = 1.0
 )
 
+// Sanctions reports who is currently silenced. access.Manager satisfies it.
+type Sanctions interface {
+	IsMuted(clientUUID string) bool
+}
+
 // Manager owns every room's chat buffer and the per-user rate limits.
 type Manager struct {
-	cfg    *config.Config
-	rooms  *rooms.Manager
-	policy authz.Policy
+	cfg       *config.Config
+	rooms     *rooms.Manager
+	policy    authz.Policy
+	sanctions Sanctions
 
 	mu       sync.Mutex
 	buffers  map[string]*Buffer
@@ -64,14 +72,16 @@ type Manager struct {
 }
 
 // NewManager wires chat into the room lifecycle.
-func NewManager(cfg *config.Config, roomMgr *rooms.Manager, policy authz.Policy) *Manager {
+func NewManager(cfg *config.Config, roomMgr *rooms.Manager, policy authz.Policy,
+	sanctions Sanctions) *Manager {
 	m := &Manager{
-		cfg:      cfg,
-		rooms:    roomMgr,
-		policy:   policy,
-		buffers:  make(map[string]*Buffer),
-		sendRate: make(map[string]*ratelimit.Bucket),
-		typeRate: make(map[string]*ratelimit.Bucket),
+		cfg:       cfg,
+		rooms:     roomMgr,
+		policy:    policy,
+		sanctions: sanctions,
+		buffers:   make(map[string]*Buffer),
+		sendRate:  make(map[string]*ratelimit.Bucket),
+		typeRate:  make(map[string]*ratelimit.Bucket),
 	}
 	// A deleted room takes its history with it.
 	roomMgr.OnDelete(func(roomID string) {
@@ -88,6 +98,12 @@ func (m *Manager) Send(sess *session.Session, req protocol.ChatSend) (protocol.M
 	room, err := m.currentRoom(sess)
 	if err != nil {
 		return protocol.Message{}, err
+	}
+	if !m.policy.Can(sess.ClientUUID, authz.PermSendMessages) {
+		return protocol.Message{}, ErrNotAllowed
+	}
+	if m.sanctions.IsMuted(sess.ClientUUID) {
+		return protocol.Message{}, ErrMuted
 	}
 
 	msg := protocol.Message{
@@ -153,6 +169,10 @@ func (m *Manager) Edit(sess *session.Session, req protocol.ChatEdit) (protocol.M
 		return protocol.Message{}, err
 	}
 
+	if m.sanctions.IsMuted(sess.ClientUUID) {
+		return protocol.Message{}, ErrMuted
+	}
+
 	text, err := textutil.NormalizeMessage(req.Text, m.cfg.Int(config.KeyChatMaxMessageLen))
 	if err != nil {
 		return protocol.Message{}, &ValidationError{Msg: err.Error()}
@@ -190,7 +210,7 @@ func (m *Manager) Delete(sess *session.Session, req protocol.ChatDelete) (protoc
 		if msg.Author.ClientUUID == sess.ClientUUID {
 			return nil
 		}
-		if !m.policy.CanModerateChat(sess.ClientUUID) {
+		if !m.policy.Can(sess.ClientUUID, authz.PermModerateChat) {
 			return ErrForbidden
 		}
 		byModerator = true
@@ -215,6 +235,9 @@ func (m *Manager) Typing(sess *session.Session, typing bool) error {
 	room, err := m.currentRoom(sess)
 	if err != nil {
 		return err
+	}
+	if m.sanctions.IsMuted(sess.ClientUUID) {
+		return ErrMuted
 	}
 	if !m.allowTyping(sess.ClientUUID) {
 		return ErrRateLimited

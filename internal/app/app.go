@@ -11,7 +11,7 @@ import (
 	"syscall"
 	"time"
 
-	"tamizchat/internal/authz"
+	"tamizchat/internal/access"
 	"tamizchat/internal/chat"
 	"tamizchat/internal/config"
 	"tamizchat/internal/gateway"
@@ -58,17 +58,19 @@ func Run(ctx context.Context, opts Options) error {
 		return err
 	}
 
-	sessions := session.NewManager(func() int { return cfg.Int(config.KeyServerMaxUsers) })
-	roomMgr, err := rooms.NewManager(ctx, store, cfg, sessions)
+	accessMgr, err := access.New(ctx, store)
 	if err != nil {
 		return err
 	}
 
-	// Phase 5 replaces this with the real role and admin system.
-	policy := authz.OpenPolicy{}
-	chatMgr := chat.NewManager(cfg, roomMgr, policy)
+	sessions := session.NewManager(func() int { return cfg.Int(config.KeyServerMaxUsers) })
+	roomMgr, err := rooms.NewManager(ctx, store, cfg, sessions, accessMgr)
+	if err != nil {
+		return err
+	}
+	chatMgr := chat.NewManager(cfg, roomMgr, accessMgr, accessMgr)
 
-	gw := gateway.New(cfg, sessions, roomMgr, chatMgr, store, policy, serverUUID)
+	gw := gateway.New(cfg, sessions, roomMgr, chatMgr, accessMgr, store, serverUUID)
 
 	handler := httpapi.Handler(httpapi.Deps{
 		Config:      cfg,

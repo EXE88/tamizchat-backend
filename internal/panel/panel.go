@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"tamizchat/internal/access"
 	"tamizchat/internal/config"
 	"tamizchat/internal/storage"
 	"tamizchat/internal/version"
@@ -19,10 +20,11 @@ import (
 
 // Panel holds the state of one interactive session.
 type Panel struct {
-	store *storage.Store
-	cfg   *config.Config
-	in    *bufio.Reader
-	out   *bufio.Writer
+	store  *storage.Store
+	cfg    *config.Config
+	access *access.Manager
+	in     *bufio.Reader
+	out    *bufio.Writer
 }
 
 // Run opens the database and drives the menu loop until the user exits.
@@ -38,11 +40,17 @@ func Run(ctx context.Context, dbPath string) error {
 		return err
 	}
 
+	accessMgr, err := access.New(ctx, store)
+	if err != nil {
+		return err
+	}
+
 	p := &Panel{
-		store: store,
-		cfg:   cfg,
-		in:    bufio.NewReader(os.Stdin),
-		out:   bufio.NewWriter(os.Stdout),
+		store:  store,
+		cfg:    cfg,
+		access: accessMgr,
+		in:     bufio.NewReader(os.Stdin),
+		out:    bufio.NewWriter(os.Stdout),
 	}
 	defer p.out.Flush()
 	return p.mainMenu(ctx)
@@ -61,6 +69,9 @@ func (p *Panel) mainMenu(ctx context.Context) error {
 		p.printf("  4) بازگرداندن یک تنظیم به مقدار پیش‌فرض\n")
 		p.printf("  5) کاربران شناخته‌شده\n")
 		p.printf("  6) مدیریت روم‌ها\n")
+		p.printf("  7) رول‌ها و دسترسی‌ها\n")
+		p.printf("  8) بن‌ها و میوت‌ها\n")
+		p.printf("  9) لاگ اقدامات مدیریتی\n")
 		p.printf("  0) خروج\n\n")
 
 		switch p.ask("انتخاب کنید") {
@@ -76,6 +87,12 @@ func (p *Panel) mainMenu(ctx context.Context) error {
 			p.showUsers(ctx)
 		case "6":
 			p.roomsMenu(ctx)
+		case "7":
+			p.accessMenu(ctx)
+		case "8":
+			p.sanctionsMenu(ctx)
+		case "9":
+			p.showModLog(ctx)
 		case "0", "q", "exit":
 			p.println("")
 			return nil
@@ -270,6 +287,8 @@ func sectionTitle(section string) string {
 		return "کاربران"
 	case "rooms":
 		return "روم‌ها"
+	case "chat":
+		return "چت"
 	case "uploads":
 		return "فایل و عکس"
 	case "livekit":

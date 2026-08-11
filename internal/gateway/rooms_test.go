@@ -113,7 +113,7 @@ func TestRoomCreationIsAnnouncedAndGated(t *testing.T) {
 		t.Fatalf("Bob should have been told about the new room, got %+v", seen)
 	}
 
-	f.policy.allowRoomManagement = false
+	// Bob holds only the default role, which does not include room management.
 	bob.send(protocol.TypeRoomCreate, "c2", protocol.RoomCreate{Name: "Secret"})
 	bob.expectError(protocol.ErrForbidden)
 }
@@ -147,12 +147,28 @@ func TestRoomJoinRequiresCorrectPassword(t *testing.T) {
 		t.Fatal("room should report that it has a password")
 	}
 
-	alice.send(protocol.TypeRoomJoin, "j0", protocol.RoomJoin{RoomID: room.ID, Password: "nope"})
-	alice.expectError(protocol.ErrRoomPassword)
+	bob, _ := f.hello(t, uuidB, "Bob", "")
+	alice.expect(protocol.TypeUserJoined)
 
-	joined := alice.joinRoom(room.ID, "letmein")
+	bob.send(protocol.TypeRoomJoin, "j0", protocol.RoomJoin{RoomID: room.ID, Password: "nope"})
+	bob.expectError(protocol.ErrRoomPassword)
+
+	joined := bob.joinRoom(room.ID, "letmein")
 	if joined.Room.MemberCount != 1 {
 		t.Fatalf("expected 1 member, got %d", joined.Room.MemberCount)
+	}
+}
+
+// An administrator holding bypass_room_password gets in without knowing it —
+// the point of the permission.
+func TestRoomPasswordCanBeBypassedWithPermission(t *testing.T) {
+	f := newFixture(t)
+	alice, _ := f.hello(t, uuidA, "Alice", "")
+	room := alice.createRoom("Private", "letmein", 0)
+
+	joined := alice.joinRoom(room.ID, "")
+	if joined.Room.ID != room.ID {
+		t.Fatalf("an admin should get in without the password, got %+v", joined.Room)
 	}
 }
 
@@ -454,7 +470,7 @@ func TestRoomsSurviveRestart(t *testing.T) {
 	room := alice.createRoom("Persistent", "pw", 7)
 
 	// A fresh manager over the same database is what a restart looks like.
-	reloaded, err := rooms.NewManager(context.Background(), f.store, f.cfg, f.sessions)
+	reloaded, err := rooms.NewManager(context.Background(), f.store, f.cfg, f.sessions, f.access)
 	if err != nil {
 		t.Fatalf("reload rooms: %v", err)
 	}

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 
+	"tamizchat/internal/authz"
 	"tamizchat/internal/protocol"
 	"tamizchat/internal/rooms"
 	"tamizchat/internal/session"
@@ -42,8 +43,7 @@ func (g *Gateway) handleRoomLeave(sess *session.Session, env protocol.Envelope) 
 }
 
 func (g *Gateway) handleRoomCreate(ctx context.Context, sess *session.Session, env protocol.Envelope) {
-	if !g.policy.CanManageRooms(sess.ClientUUID) {
-		sess.SendError(env.ID, protocol.ErrForbidden, "اجازهٔ مدیریت روم را ندارید")
+	if !g.require(sess, env.ID, authz.PermManageRooms) {
 		return
 	}
 
@@ -64,8 +64,7 @@ func (g *Gateway) handleRoomCreate(ctx context.Context, sess *session.Session, e
 }
 
 func (g *Gateway) handleRoomUpdate(ctx context.Context, sess *session.Session, env protocol.Envelope) {
-	if !g.policy.CanManageRooms(sess.ClientUUID) {
-		sess.SendError(env.ID, protocol.ErrForbidden, "اجازهٔ مدیریت روم را ندارید")
+	if !g.require(sess, env.ID, authz.PermManageRooms) {
 		return
 	}
 
@@ -84,8 +83,7 @@ func (g *Gateway) handleRoomUpdate(ctx context.Context, sess *session.Session, e
 }
 
 func (g *Gateway) handleRoomDelete(ctx context.Context, sess *session.Session, env protocol.Envelope) {
-	if !g.policy.CanManageRooms(sess.ClientUUID) {
-		sess.SendError(env.ID, protocol.ErrForbidden, "اجازهٔ مدیریت روم را ندارید")
+	if !g.require(sess, env.ID, authz.PermManageRooms) {
 		return
 	}
 
@@ -119,6 +117,10 @@ func (g *Gateway) replyRoomError(sess *session.Session, id string, err error) {
 		sess.SendError(id, protocol.ErrRoomLimit, "به سقف تعداد روم‌های سرور رسیده‌اید")
 	case errors.Is(err, rooms.ErrNotInRoom):
 		sess.SendError(id, protocol.ErrNotInRoom, "در هیچ رومی نیستید")
+	case errors.Is(err, rooms.ErrRoleRequired):
+		sess.SendError(id, protocol.ErrRoleRequired, "برای ورود به این روم رول لازم را ندارید")
+	case errors.Is(err, rooms.ErrRoleUnknown):
+		sess.SendError(id, protocol.ErrRoleNotFound, "چنین رولی وجود ندارد")
 	default:
 		var invalid *rooms.ValidationError
 		if errors.As(err, &invalid) {

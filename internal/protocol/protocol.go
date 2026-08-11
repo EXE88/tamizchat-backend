@@ -39,6 +39,20 @@ const (
 	TypeChatEdit    = "chat.edit"
 	TypeChatDelete  = "chat.delete"
 	TypeChatTyping  = "chat.typing"
+
+	TypeAdminKick       = "admin.kick"
+	TypeAdminBan        = "admin.ban"
+	TypeAdminUnban      = "admin.unban"
+	TypeAdminMute       = "admin.mute"
+	TypeAdminUnmute     = "admin.unmute"
+	TypeAdminMove       = "admin.move"
+	TypeAdminSanctions  = "admin.sanctions"
+	TypeAdminRoleList   = "admin.role.list"
+	TypeAdminRoleCreate = "admin.role.create"
+	TypeAdminRoleUpdate = "admin.role.update"
+	TypeAdminRoleDelete = "admin.role.delete"
+	TypeAdminRoleGrant  = "admin.role.grant"
+	TypeAdminRoleRevoke = "admin.role.revoke"
 )
 
 // Frame types sent by the server.
@@ -65,6 +79,18 @@ const (
 	TypeChatUpdated      = "chat.updated"
 	TypeChatDeleted      = "chat.deleted"
 	TypeChatTypingEvent  = "chat.typing"
+
+	TypeUserKicked       = "user.kicked"
+	TypeUserBanned       = "user.banned"
+	TypeUserMuted        = "user.muted"
+	TypeUserUnmuted      = "user.unmuted"
+	TypeUserRolesChanged = "user.roles_changed"
+
+	TypeAdminSanctionList = "admin.sanctions"
+	TypeAdminRoles        = "admin.role.list"
+	TypeAdminRole         = "admin.role" // one role, after create or update
+	TypeAdminRoleGone     = "admin.role.deleted"
+	TypeAdminOK           = "admin.ok" // an action succeeded and needs no payload
 )
 
 // Error codes. The client shows its own localized text per code, so these
@@ -94,6 +120,16 @@ const (
 	ErrMessageInvalid   = "message_invalid"
 	ErrMessageNotFound  = "message_not_found"
 	ErrStickersDisabled = "stickers_disabled"
+
+	ErrBanned        = "banned"
+	ErrMuted         = "muted"
+	ErrOutranked     = "outranked"
+	ErrUserNotFound  = "user_not_found"
+	ErrRoleNotFound  = "role_not_found"
+	ErrRoleNameTaken = "role_name_taken"
+	ErrRoleProtected = "role_protected"
+	ErrRoleRequired  = "room_role_required"
+	ErrInvalidInput  = "invalid_input"
 )
 
 // Reasons a session ends, reported in user.left and in the close frame.
@@ -103,6 +139,8 @@ const (
 	ReasonTimeout    = "timeout"
 	ReasonShutdown   = "server_shutdown"
 	ReasonSlow       = "slow_consumer"
+	ReasonKicked     = "kicked"
+	ReasonBanned     = "banned"
 )
 
 // Hello is the client's opening frame.
@@ -121,6 +159,10 @@ type User struct {
 	Username   string `json:"username"`
 	JoinedAt   int64  `json:"joined_at"` // unix seconds
 	RoomID     string `json:"room_id"`
+	// Roles are the ids of the roles this user holds, strongest first. The
+	// client looks their names and colours up in the role list from welcome.
+	Roles []string `json:"roles,omitempty"`
+	Muted bool     `json:"muted,omitempty"`
 }
 
 // Room is the public view of a room. The password itself is never sent; only
@@ -133,6 +175,9 @@ type Room struct {
 	Position    int    `json:"position"`
 	MemberCount int    `json:"member_count"`
 	Members     []User `json:"members"`
+	// RequiredRoleID is empty for an open room; otherwise only holders of that
+	// role (or someone allowed to bypass it) may enter.
+	RequiredRoleID string `json:"required_role_id,omitempty"`
 }
 
 // RoomList is the reply to room.list.
@@ -159,19 +204,21 @@ type RoomLeft struct {
 
 // RoomCreate defines a new room. Capacity 0 means "use the server default".
 type RoomCreate struct {
-	Name     string `json:"name"`
-	Password string `json:"password,omitempty"`
-	Capacity int    `json:"capacity,omitempty"`
+	Name           string `json:"name"`
+	Password       string `json:"password,omitempty"`
+	Capacity       int    `json:"capacity,omitempty"`
+	RequiredRoleID string `json:"required_role_id,omitempty"`
 }
 
 // RoomUpdate edits a room. Only the fields that are present are changed, which
 // is why every field is a pointer.
 type RoomUpdate struct {
-	RoomID   string  `json:"room_id"`
-	Name     *string `json:"name,omitempty"`
-	Password *string `json:"password,omitempty"`
-	Capacity *int    `json:"capacity,omitempty"`
-	Position *int    `json:"position,omitempty"`
+	RoomID         string  `json:"room_id"`
+	Name           *string `json:"name,omitempty"`
+	Password       *string `json:"password,omitempty"`
+	Capacity       *int    `json:"capacity,omitempty"`
+	Position       *int    `json:"position,omitempty"`
+	RequiredRoleID *string `json:"required_role_id,omitempty"`
 }
 
 // RoomDelete removes a room.
@@ -197,7 +244,88 @@ const (
 	ReasonSwitchedRoom    = "switched_room"
 	ReasonDisconnected    = "disconnected"
 	ReasonLeftVoluntarily = "left"
+	ReasonMoved           = "moved_by_admin"
 )
+
+// Role is the public view of a role. Permissions travel as stable string keys
+// rather than a raw bitmask, so a client built against an older server still
+// understands the ones it knows.
+type Role struct {
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Permissions []string `json:"permissions"`
+	Priority    int      `json:"priority"`
+	Color       string   `json:"color,omitempty"`
+	IsDefault   bool     `json:"is_default"`
+}
+
+// RoleSpec is the create/update payload. Absent fields are left unchanged.
+type RoleSpec struct {
+	RoleID      string    `json:"role_id,omitempty"`
+	Name        *string   `json:"name,omitempty"`
+	Permissions *[]string `json:"permissions,omitempty"`
+	Priority    *int      `json:"priority,omitempty"`
+	Color       *string   `json:"color,omitempty"`
+}
+
+// RoleRef names a role in delete requests.
+type RoleRef struct {
+	RoleID string `json:"role_id"`
+}
+
+// RoleAssignment grants or revokes a role.
+type RoleAssignment struct {
+	ClientUUID string `json:"client_uuid"`
+	RoleID     string `json:"role_id"`
+}
+
+// UserRoles announces that someone's roles changed.
+type UserRoles struct {
+	ClientUUID  string   `json:"client_uuid"`
+	Roles       []string `json:"roles"`
+	Permissions []string `json:"permissions"`
+}
+
+// AdminTarget is the common shape of a moderation request. DurationSec of zero
+// means permanent for bans and mutes.
+type AdminTarget struct {
+	ClientUUID  string `json:"client_uuid"`
+	Reason      string `json:"reason,omitempty"`
+	DurationSec int64  `json:"duration_sec,omitempty"`
+}
+
+// AdminMove sends a user into another room, or out of every room when RoomID
+// is empty.
+type AdminMove struct {
+	ClientUUID string `json:"client_uuid"`
+	RoomID     string `json:"room_id"`
+}
+
+// Sanction is an active ban or mute as shown to an admin client.
+type Sanction struct {
+	ClientUUID string `json:"client_uuid"`
+	Username   string `json:"username,omitempty"`
+	Kind       string `json:"kind"` // "ban" or "mute"
+	Reason     string `json:"reason,omitempty"`
+	CreatedBy  string `json:"created_by,omitempty"`
+	CreatedAt  int64  `json:"created_at"`
+	ExpiresAt  int64  `json:"expires_at"` // 0 means permanent
+}
+
+// SanctionList is the reply to admin.sanctions.
+type SanctionList struct {
+	Sanctions []Sanction `json:"sanctions"`
+}
+
+// Moderation announces a moderation action to everyone.
+type Moderation struct {
+	ClientUUID string `json:"client_uuid"`
+	Username   string `json:"username,omitempty"`
+	ByUUID     string `json:"by_uuid,omitempty"`
+	ByUsername string `json:"by_username,omitempty"`
+	Reason     string `json:"reason,omitempty"`
+	ExpiresAt  int64  `json:"expires_at,omitempty"`
+}
 
 // Message kinds.
 const (
@@ -281,7 +409,11 @@ type Welcome struct {
 	You        User       `json:"you"`
 	Users      []User     `json:"users"`
 	Rooms      []Room     `json:"rooms"`
+	Roles      []Role     `json:"roles"`
 	Limits     UserLimits `json:"limits"`
+	// Permissions is what *you* may do, expanded so the client can hide the
+	// controls you cannot use. The server checks again on every request.
+	Permissions []string `json:"permissions"`
 }
 
 // UserLimits tells the client what the server will accept, so it can validate

@@ -29,6 +29,8 @@ type Session struct {
 	mu       sync.RWMutex
 	username string
 	roomID   string
+	roles    []string
+	muted    bool
 	closed   bool
 	reason   string
 
@@ -80,6 +82,22 @@ func (s *Session) SetRoomID(id string) {
 	s.mu.Unlock()
 }
 
+// SetRoles caches the role ids shown to other clients. The access manager is
+// the source of truth; this is a copy kept next to the session so presence
+// payloads do not have to look it up on every broadcast.
+func (s *Session) SetRoles(roles []string) {
+	s.mu.Lock()
+	s.roles = append([]string(nil), roles...)
+	s.mu.Unlock()
+}
+
+// SetMuted records whether the user is currently muted.
+func (s *Session) SetMuted(muted bool) {
+	s.mu.Lock()
+	s.muted = muted
+	s.mu.Unlock()
+}
+
 // User is the public view of this session.
 func (s *Session) User() protocol.User {
 	s.mu.RLock()
@@ -89,6 +107,8 @@ func (s *Session) User() protocol.User {
 		Username:   s.username,
 		JoinedAt:   s.JoinedAt.Unix(),
 		RoomID:     s.roomID,
+		Roles:      append([]string(nil), s.roles...),
+		Muted:      s.muted,
 	}
 }
 

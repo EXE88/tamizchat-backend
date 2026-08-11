@@ -116,6 +116,33 @@ func (g *Gateway) dispatch(ctx context.Context, sess *session.Session, data []by
 	case protocol.TypeChatTyping:
 		g.handleChatTyping(sess, env)
 
+	case protocol.TypeAdminKick:
+		g.handleAdminKick(ctx, sess, env)
+	case protocol.TypeAdminBan:
+		g.handleAdminBan(ctx, sess, env)
+	case protocol.TypeAdminUnban:
+		g.handleAdminUnban(ctx, sess, env)
+	case protocol.TypeAdminMute:
+		g.handleAdminMute(ctx, sess, env)
+	case protocol.TypeAdminUnmute:
+		g.handleAdminUnmute(ctx, sess, env)
+	case protocol.TypeAdminMove:
+		g.handleAdminMove(ctx, sess, env)
+	case protocol.TypeAdminSanctions:
+		g.handleAdminSanctions(sess, env)
+	case protocol.TypeAdminRoleList:
+		g.handleRoleList(sess, env)
+	case protocol.TypeAdminRoleCreate:
+		g.handleRoleCreate(ctx, sess, env)
+	case protocol.TypeAdminRoleUpdate:
+		g.handleRoleUpdate(ctx, sess, env)
+	case protocol.TypeAdminRoleDelete:
+		g.handleRoleDelete(ctx, sess, env)
+	case protocol.TypeAdminRoleGrant:
+		g.handleRoleGrant(ctx, sess, env)
+	case protocol.TypeAdminRoleRevoke:
+		g.handleRoleRevoke(ctx, sess, env)
+
 	case protocol.TypeHello:
 		sess.SendError(env.ID, protocol.ErrBadRequest, "hello فقط یک‌بار در ابتدای اتصال پذیرفته می‌شود")
 
@@ -169,7 +196,7 @@ func (g *Gateway) writePump(ctx context.Context, conn *websocket.Conn, sess *ses
 			// here is what unblocks the read pump when the session was ended
 			// by the server rather than by the client.
 			g.flush(conn, sess)
-			closeWith(conn, websocket.StatusNormalClosure, sess.Reason())
+			shutSocket(conn)
 			return
 		case frame := <-sess.Outbound():
 			if !g.write(ctx, conn, frame) {

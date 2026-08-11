@@ -83,7 +83,8 @@ func (g *Gateway) handleChatTyping(sess *session.Session, env protocol.Envelope)
 	// A typing hint that is dropped or rate limited is not worth an error
 	// frame: the client's own timeout clears the indicator anyway.
 	if err := g.chat.Typing(sess, req.Typing); err != nil &&
-		!errors.Is(err, chat.ErrRateLimited) && !errors.Is(err, chat.ErrNotInRoom) {
+		!errors.Is(err, chat.ErrRateLimited) && !errors.Is(err, chat.ErrNotInRoom) &&
+		!errors.Is(err, chat.ErrMuted) {
 		g.replyChatError(sess, env.ID, err)
 	}
 }
@@ -96,6 +97,10 @@ func (g *Gateway) replyChatError(sess *session.Session, id string, err error) {
 		sess.SendError(id, protocol.ErrTooFast, "کمی آرام‌تر — تعداد پیام‌ها بیش از حد مجاز است")
 	case errors.Is(err, chat.ErrForbidden):
 		sess.SendError(id, protocol.ErrForbidden, "اجازهٔ این کار را روی این پیام ندارید")
+	case errors.Is(err, chat.ErrNotAllowed):
+		sess.SendError(id, protocol.ErrForbidden, "اجازهٔ ارسال پیام را ندارید")
+	case errors.Is(err, chat.ErrMuted):
+		sess.SendError(id, protocol.ErrMuted, "شما میوت شده‌اید و نمی‌توانید پیام بفرستید")
 	case errors.Is(err, chat.ErrStickersDisabled):
 		sess.SendError(id, protocol.ErrStickersDisabled, "ارسال استیکر در این سرور غیرفعال است")
 	case errors.Is(err, chat.ErrNotFound):

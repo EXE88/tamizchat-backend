@@ -48,8 +48,12 @@
     "server_name": "TamizChat Server",
     "welcome_message": "به سرور خوش آمدید!",
     "heartbeat_sec": 30,
-    "you":   { "client_uuid": "…", "username": "دانیال", "joined_at": 1760000000 },
-    "users": [ { "client_uuid": "…", "username": "…", "joined_at": 0 } ],
+    "you":   { "client_uuid": "…", "username": "دانیال", "joined_at": 1760000000,
+                "room_id": "", "roles": ["role-admin"], "muted": false },
+    "users": [ User ],
+    "rooms": [ Room ],
+    "roles": [ Role ],
+    "permissions": ["send_messages", "manage_rooms", "…"],
     "limits": { "username_min": 3, "username_max": 24, "max_users": 200,
                 "message_max": 2000, "history_limit": 500, "stickers_enabled": true }
 }}
@@ -68,14 +72,27 @@
 | `room.list` | — | پاسخ `room.list` با کل درخت روم‌ها |
 | `room.join` | `{"room_id", "password"}` | ورود به روم؛ روم قبلی خودکار ترک می‌شود |
 | `room.leave` | — | خروج از روم فعلی |
-| `room.create` | `{"name", "password", "capacity"}` | نیازمند مجوز مدیریت روم |
-| `room.update` | `{"room_id", "name"?, "password"?, "capacity"?, "position"?}` | فقط فیلدهای موجود تغییر می‌کنند |
-| `room.delete` | `{"room_id"}` | نیازمند مجوز مدیریت روم |
+| `room.create` | `{"name", "password", "capacity", "required_role_id"}` | نیازمند مجوز `manage_rooms` |
+| `room.update` | `{"room_id", "name"?, "password"?, "capacity"?, "position"?, "required_role_id"?}` | فقط فیلدهای موجود تغییر می‌کنند |
+| `room.delete` | `{"room_id"}` | نیازمند مجوز `manage_rooms` |
 | `chat.send` | `{"text"}` یا `{"sticker_id"}` | در روم فعلی؛ دقیقاً یکی از دو فیلد |
 | `chat.history` | `{"before_seq"?, "limit"?}` | صفحه‌بندی به عقب |
 | `chat.edit` | `{"message_id", "text"}` | فقط نویسندهٔ پیام |
 | `chat.delete` | `{"message_id"}` | نویسنده، یا مدیر برای پیام دیگران |
 | `chat.typing` | `{"typing": true}` | بدون پاسخ؛ ذخیره هم نمی‌شود |
+| `admin.kick` | `{"client_uuid", "reason"}` | نیازمند مجوز `kick` |
+| `admin.ban` | `{"client_uuid", "reason", "duration_sec"}` | `0` یعنی دائمی |
+| `admin.unban` | `{"client_uuid"}` | روی کاربر آفلاین هم کار می‌کند |
+| `admin.mute` | `{"client_uuid", "reason", "duration_sec"}` | بدون قطع اتصال |
+| `admin.unmute` | `{"client_uuid"}` | |
+| `admin.move` | `{"client_uuid", "room_id"}` | `room_id` خالی یعنی خروج از روم |
+| `admin.sanctions` | — | فهرست بن‌ها و میوت‌های فعال |
+| `admin.role.list` | — | برای همه آزاد است (نمایش نام و رنگ) |
+| `admin.role.create` | RoleSpec | نیازمند مجوز `manage_roles` |
+| `admin.role.update` | RoleSpec با `role_id` | |
+| `admin.role.delete` | `{"role_id"}` | رول‌های داخلی حذف نمی‌شوند |
+| `admin.role.grant` | `{"client_uuid", "role_id"}` | |
+| `admin.role.revoke` | `{"client_uuid", "role_id"}` | |
 
 `capacity: 0` هنگام ساخت یعنی «از پیش‌فرض سرور استفاده کن».
 
@@ -101,12 +118,21 @@
 | `chat.updated` | Message ویرایش‌شده |
 | `chat.deleted` | `{"room_id", "message_id", "deleted_by"?}` |
 | `chat.typing` | `{"room_id", "client_uuid", "username", "typing"}` |
+| `user.kicked` / `user.banned` | `{"client_uuid", "username", "by_uuid", "by_username", "reason", "expires_at"}` |
+| `user.muted` / `user.unmuted` | همان قالب بالا |
+| `user.roles_changed` | `{"client_uuid", "roles", "permissions"}` — فقط برای خودِ کاربر |
+| `admin.sanctions` | `{"sanctions": [Sanction]}` |
+| `admin.role.list` | آرایه‌ای از Role |
+| `admin.role` | یک Role، بعد از ساخت یا ویرایش |
+| `admin.role.deleted` | `{"role_id"}` |
+| `admin.ok` | تأیید انجام یک اکشن مدیریتی |
 
 قالب `Room`:
 
 ```json
 { "id": "…", "name": "…", "has_password": false, "capacity": 25,
-  "position": 0, "member_count": 2, "members": [ User ] }
+  "position": 0, "member_count": 2, "members": [ User ],
+  "required_role_id": "" }
 ```
 
 رمز روم هرگز برای کلاینت فرستاده نمی‌شود؛ فقط `has_password`.
@@ -179,6 +205,13 @@
 | `room_invalid_name` | نام یا ظرفیت روم قابل قبول نیست (`message` قابل نمایش است) |
 | `not_in_a_room` | عملیات نیازمند حضور در یک روم است |
 | `forbidden` | مجوز لازم را ندارید |
+| `banned` | از سرور بن شده‌اید (`message` دلیل را دارد) |
+| `muted` | میوت هستید و نمی‌توانید پیام بفرستید |
+| `outranked` | هدف هم‌رتبه یا بالاتر از شماست |
+| `user_not_found` | کاربر آنلاین نیست یا چنین محدودیتی ثبت نشده |
+| `role_not_found` / `role_name_taken` / `role_protected` | خطاهای رول |
+| `room_role_required` | برای ورود به روم، رول لازم را ندارید |
+| `invalid_input` | ورودی اکشن مدیریتی معتبر نیست |
 | `message_invalid` | متن یا استیکر قابل قبول نیست (`message` قابل نمایش است) |
 | `message_not_found` | پیام دیگر در حافظهٔ روم نیست |
 | `stickers_disabled` | ارسال استیکر در این سرور خاموش است |
@@ -212,3 +245,65 @@
 سرور هر `heartbeat_sec` ثانیه یک ping در سطح WebSocket می‌فرستد. کتابخانه‌های
 استاندارد خودشان pong را جواب می‌دهند. کلاینتی که جواب ندهد با دلیل `timeout`
 قطع می‌شود. پیام `ping` سطح اپلیکیشن هم برای اندازه‌گیری تأخیر در دسترس است.
+
+
+## رول‌ها و مجوزها
+
+هر رول یک بیت‌مسک مجوز، یک **رتبه** و یک رنگ دارد. مجوزهای مؤثر هر کاربر
+اجتماع مجوزهای همهٔ رول‌های اوست، به‌علاوهٔ رول‌هایی که `is_default` دارند و
+همه به‌صورت ضمنی آن‌ها را دارند.
+
+قالب `Role`:
+
+```json
+{ "id": "role-admin", "name": "ادمین",
+  "permissions": ["kick", "ban", "..."],
+  "priority": 100, "color": "#e74c3c", "is_default": false }
+```
+
+مجوزها به‌جای عدد، کلید متنی پایدار هستند تا کلاینت قدیمی‌تر هم بتواند
+آن‌هایی را که می‌شناسد بفهمد:
+
+`send_messages` · `upload_files` · `moderate_chat` · `manage_rooms` ·
+`join_locked_rooms` · `bypass_room_password` · `kick` · `ban` · `mute` ·
+`move_users` · `manage_roles` · `control_bots`
+
+`welcome` هم فهرست کامل رول‌های سرور (`roles`) و مجوزهای خودِ شما
+(`permissions`) را می‌دهد تا کلاینت بتواند دکمه‌هایی را که به کارتان نمی‌آید
+پنهان کند. سرور در هر درخواست دوباره بررسی می‌کند؛ پنهان‌کردن دکمه امنیت
+نیست، فقط ادب رابط کاربری است.
+
+### قاعدهٔ رتبه
+
+یک مدیر فقط می‌تواند روی کسی اقدام کند که رتبه‌اش **اکیداً کمتر** باشد. اگر
+دو ادمین هم‌رتبه باشند، هیچ‌کدام نمی‌تواند دیگری را کیک یا بن یا میوت کند.
+به همین ترتیب:
+
+- نمی‌توانید رولی هم‌رتبه یا بالاتر از خودتان بسازید یا بدهید
+- نمی‌توانید مجوزی به یک رول بدهید که خودتان ندارید
+
+این دو قانون جلوی ارتقای خودسرانه را می‌گیرند.
+
+### ورود به روم
+
+اگر روم `required_role_id` داشته باشد، فقط دارندگان آن رول (یا کسی که
+`join_locked_rooms` دارد) می‌توانند وارد شوند. دارندهٔ
+`bypass_room_password` هم بدون دانستن رمز روم وارد می‌شود.
+
+`admin.move` هیچ‌کدام از این‌ها را رعایت نمی‌کند — نه رمز، نه رول، نه ظرفیت.
+جابه‌جایی توسط مدیر یک تصمیم صریح است که خودش از کنترل مجوز عبور کرده.
+
+### بن و میوت
+
+- بن مانع **اتصال** می‌شود؛ در handshake بررسی می‌شود و کد `banned` برمی‌گردد.
+- میوت فقط جلوی ارسال پیام را می‌گیرد و اتصال را قطع نمی‌کند. با اتصال دوباره
+  هم برطرف نمی‌شود.
+- هر دو می‌توانند موقت باشند (`duration_sec`) یا دائمی (`0`).
+- اولین ادمین سرور از پنل کامندلاین ساخته می‌شود، نه از داخل اپ.
+
+### بستن اتصال از سمت سرور
+
+وقتی سرور اتصالی را می‌بندد (کیک، بن، خاموشی)، دلیل **قبلاً** به‌صورت یک فریم
+معمولی فرستاده شده (`user.kicked`، `user.banned`، یا `error`). خود بستن سوکت
+منتظر پاسخ کلاینت نمی‌ماند، پس ممکن است close frame استانداردی نبینید؛ به
+آخرین فریم دریافتی تکیه کنید.

@@ -289,12 +289,11 @@ func TestModeratorCanDeleteOthersMessages(t *testing.T) {
 	}
 	bob.expect(protocol.TypeChatDeleted)
 
-	// Without moderation rights the same call is refused.
-	f.policy.allowChatModeration = false
-	other := bob.sendText("again")
-	alice.expect(protocol.TypeChatMessage)
-	alice.send(protocol.TypeChatDelete, "d2", protocol.ChatDelete{MessageID: other.ID})
-	alice.expectError(protocol.ErrForbidden)
+	// The other way round is refused: Bob holds only the default role.
+	mine := alice.sendText("mine")
+	bob.expect(protocol.TypeChatMessage)
+	bob.send(protocol.TypeChatDelete, "d2", protocol.ChatDelete{MessageID: mine.ID})
+	bob.expectError(protocol.ErrForbidden)
 }
 
 func TestTypingIsForwardedToTheRoom(t *testing.T) {

@@ -32,6 +32,8 @@ var (
 	ErrFull         = errors.New("room is full")
 	ErrLimitReached = errors.New("room limit reached")
 	ErrNotInRoom    = errors.New("not in a room")
+	ErrRoleRequired = errors.New("room requires a role you do not have")
+	ErrRoleUnknown  = errors.New("no such role")
 )
 
 // ValidationError carries a message that is safe — and useful — to show the
@@ -57,11 +59,38 @@ type Broadcaster interface {
 	Broadcast(typ string, payload any, exceptUUID string)
 }
 
+// Access answers the two questions a room asks before letting someone in.
+// access.Manager satisfies it.
+type Access interface {
+	// CanEnterRestricted reports whether the user may enter a room limited to
+	// holders of roleID.
+	CanEnterRestricted(clientUUID, roleID string) bool
+	// CanBypassPassword reports whether the user may skip a room password.
+	CanBypassPassword(clientUUID string) bool
+	// RoleExists validates a role id before it is stored on a room.
+	RoleExists(roleID string) bool
+}
+
+// OpenAccess ignores role restrictions but still enforces room passwords —
+// skipping a password is a privilege, never a default. It is the fallback for
+// tests and for a server whose role system is not configured.
+type OpenAccess struct{}
+
+// CanEnterRestricted always allows.
+func (OpenAccess) CanEnterRestricted(string, string) bool { return true }
+
+// CanBypassPassword never allows skipping the password.
+func (OpenAccess) CanBypassPassword(string) bool { return false }
+
+// RoleExists accepts any role id, since this fallback knows of none.
+func (OpenAccess) RoleExists(string) bool { return true }
+
 // Manager owns every room on the server.
 type Manager struct {
 	store  RoomStore
 	cfg    *config.Config
 	global Broadcaster
+	access Access
 
 	mu       sync.RWMutex
 	rooms    map[string]*Room
@@ -78,13 +107,20 @@ func (m *Manager) OnDelete(fn func(roomID string)) {
 }
 
 // NewManager loads the persisted room definitions into memory.
-func NewManager(ctx context.Context, store RoomStore, cfg *config.Config, global Broadcaster) (*Manager, error) {
+func NewManager(ctx context.Context, store RoomStore, cfg *config.Config,
+	global Broadcaster, access Access) (*Manager, error) {
 	defs, err := store.ListRooms(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	m := &Manager{store: store, cfg: cfg, global: global, rooms: make(map[string]*Room, len(defs))}
+	m := &Manager{
+		store:  store,
+		cfg:    cfg,
+		global: global,
+		access: access,
+		rooms:  make(map[string]*Room, len(defs)),
+	}
 	for _, def := range defs {
 		m.rooms[def.ID] = newRoom(def)
 	}
@@ -164,12 +200,17 @@ func (m *Manager) Create(ctx context.Context, actorUUID string, req protocol.Roo
 		return nil, err
 	}
 
+	if req.RequiredRoleID != "" && !m.access.RoleExists(req.RequiredRoleID) {
+		return nil, ErrRoleUnknown
+	}
+
 	def := storage.Room{
-		ID:       storage.NewUUID(),
-		Name:     name,
-		Password: strings.TrimSpace(req.Password),
-		Capacity: capacity,
-		Position: pos,
+		ID:             storage.NewUUID(),
+		Name:           name,
+		Password:       strings.TrimSpace(req.Password),
+		Capacity:       capacity,
+		Position:       pos,
+		RequiredRoleID: req.RequiredRoleID,
 	}
 	if err := m.store.CreateRoom(ctx, def); err != nil {
 		if errors.Is(err, storage.ErrRoomNameTaken) {
@@ -222,6 +263,12 @@ func (m *Manager) Update(ctx context.Context, actorUUID string, req protocol.Roo
 	}
 	if req.Position != nil {
 		def.Position = *req.Position
+	}
+	if req.RequiredRoleID != nil {
+		if *req.RequiredRoleID != "" && !m.access.RoleExists(*req.RequiredRoleID) {
+			return nil, ErrRoleUnknown
+		}
+		def.RequiredRoleID = *req.RequiredRoleID
 	}
 
 	if err := m.store.UpdateRoom(ctx, def); err != nil {
@@ -293,11 +340,32 @@ func (m *Manager) Join(sess *session.Session, roomID, password string) (*Room, e
 	}
 
 	def := room.Definition()
-	if def.Password != "" &&
+	if def.RequiredRoleID != "" && !m.access.CanEnterRestricted(sess.ClientUUID, def.RequiredRoleID) {
+		return nil, ErrRoleRequired
+	}
+	if def.Password != "" && !m.access.CanBypassPassword(sess.ClientUUID) &&
 		subtle.ConstantTimeCompare([]byte(def.Password), []byte(password)) != 1 {
 		return nil, ErrBadPassword
 	}
 
+	return m.enter(sess, room, false)
+}
+
+// Force places a session into a room ignoring the password, the role lock and
+// the capacity. It is the admin "move user" path: the permission check already
+// happened, and an administrator's explicit decision outranks the room's own
+// rules — the same way it works in TeamSpeak.
+func (m *Manager) Force(sess *session.Session, roomID string) (*Room, error) {
+	room, ok := m.Get(roomID)
+	if !ok {
+		return nil, ErrNotFound
+	}
+	return m.enter(sess, room, true)
+}
+
+// enter is the shared body of Join and Force.
+func (m *Manager) enter(sess *session.Session, room *Room, ignoreCapacity bool) (*Room, error) {
+	roomID := room.ID()
 	if sess.RoomID() == roomID {
 		return room, nil // already there; joining again is a no-op
 	}
@@ -305,7 +373,7 @@ func (m *Manager) Join(sess *session.Session, roomID, password string) (*Room, e
 	// Reserve the slot and cancel any pending purge in one critical section, so
 	// two clients cannot both take the last seat.
 	room.mu.Lock()
-	if room.def.Capacity > 0 && len(room.members) >= room.def.Capacity {
+	if !ignoreCapacity && room.def.Capacity > 0 && len(room.members) >= room.def.Capacity {
 		room.mu.Unlock()
 		return nil, ErrFull
 	}
@@ -326,7 +394,7 @@ func (m *Manager) Join(sess *session.Session, roomID, password string) (*Room, e
 		RoomID: roomID, User: sess.User(),
 	}, sess.ClientUUID)
 
-	slog.Debug("room join", "room", def.Name, "username", sess.Username())
+	slog.Debug("room join", "room", room.Name(), "username", sess.Username())
 	return room, nil
 }
 
