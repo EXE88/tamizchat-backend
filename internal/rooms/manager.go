@@ -175,6 +175,12 @@ func (m *Manager) Get(id string) (*Room, bool) {
 	return r, ok
 }
 
+// Exists reports whether a room id is defined.
+func (m *Manager) Exists(id string) bool {
+	_, ok := m.Get(id)
+	return ok
+}
+
 // Count is the number of rooms on the server.
 func (m *Manager) Count() int {
 	m.mu.RLock()

@@ -29,6 +29,10 @@ type Deps struct {
 	MaxUploadBytes func() int64
 	// OnUpload announces a finished upload in the uploader's room.
 	OnUpload func(uploader *session.Session, file files.File)
+	// Bots serves the audio a music bot is playing. Nil disables the endpoint.
+	Bots Bots
+	// Webhooks verifies LiveKit's callbacks. Nil disables the endpoint.
+	Webhooks LiveKitWebhooks
 }
 
 // Handler builds the router.
@@ -67,6 +71,13 @@ func Handler(d Deps) http.Handler {
 	if d.Files != nil {
 		mux.HandleFunc("POST /api/v1/upload", d.handleUpload)
 		mux.HandleFunc("GET /api/v1/file/{id}", d.handleDownload)
+	}
+
+	if d.Bots != nil {
+		mux.HandleFunc("GET /api/v1/bot-stream/{id}", d.handleBotStream)
+	}
+	if d.Webhooks != nil {
+		mux.HandleFunc("POST /api/v1/livekit/webhook", d.handleLiveKitWebhook)
 	}
 
 	return logRequests(mux)

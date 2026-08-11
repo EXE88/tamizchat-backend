@@ -19,8 +19,11 @@ var ErrNotConfigured = errors.New("livekit is not configured")
 // server must never block on it.
 const apiTimeout = 5 * time.Second
 
-// client speaks LiveKit's RoomService, which is Twirp over HTTP with JSON
-// bodies: POST /twirp/livekit.RoomService/<Method>.
+// roomService is the Twirp service name for LiveKit's room API.
+const roomService = "livekit.RoomService"
+
+// client speaks LiveKit's Twirp APIs, which are HTTP with JSON bodies:
+// POST /twirp/<service>/<Method>.
 type client struct {
 	http *http.Client
 }
@@ -29,8 +32,14 @@ func newClient() *client {
 	return &client{http: &http.Client{Timeout: apiTimeout}}
 }
 
-// call posts a request to one RoomService method.
-func (c *client) call(ctx context.Context, base, apiKey, apiSecret, method string, body any) error {
+// call posts a request to one Twirp method and discards the reply.
+func (c *client) call(ctx context.Context, base, apiKey, apiSecret, service, method string, body any) error {
+	return c.callInto(ctx, base, apiKey, apiSecret, service, method, body, nil)
+}
+
+// callInto posts a request and decodes the reply into out when it is not nil.
+func (c *client) callInto(ctx context.Context, base, apiKey, apiSecret, service, method string,
+	body any, out any) error {
 	if base == "" || apiKey == "" || apiSecret == "" {
 		return ErrNotConfigured
 	}
@@ -45,7 +54,7 @@ func (c *client) call(ctx context.Context, base, apiKey, apiSecret, method strin
 		return err
 	}
 
-	url := strings.TrimRight(base, "/") + "/twirp/livekit.RoomService/" + method
+	url := strings.TrimRight(base, "/") + "/twirp/" + service + "/" + method
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
 	if err != nil {
 		return err
@@ -59,17 +68,25 @@ func (c *client) call(ctx context.Context, base, apiKey, apiSecret, method strin
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		detail, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return fmt.Errorf("livekit %s: status %d: %s", method, resp.StatusCode, strings.TrimSpace(string(detail)))
+	reply, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return fmt.Errorf("livekit %s: read reply: %w", method, err)
 	}
-	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<16))
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("livekit %s: status %d: %s", method, resp.StatusCode,
+			strings.TrimSpace(string(reply[:min(len(reply), 512)])))
+	}
+	if out != nil {
+		if err := json.Unmarshal(reply, out); err != nil {
+			return fmt.Errorf("livekit %s: decode reply: %w", method, err)
+		}
+	}
 	return nil
 }
 
 // removeParticipant disconnects someone from a LiveKit room.
 func (c *client) removeParticipant(ctx context.Context, base, key, secret, room, identity string) error {
-	return c.call(ctx, base, key, secret, "RemoveParticipant", map[string]string{
+	return c.call(ctx, base, key, secret, roomService, "RemoveParticipant", map[string]string{
 		"room":     room,
 		"identity": identity,
 	})
@@ -88,7 +105,7 @@ func (c *client) setPermission(ctx context.Context, base, key, secret, room, ide
 		permission["canPublishSources"] = sources
 	}
 
-	return c.call(ctx, base, key, secret, "UpdateParticipant", map[string]any{
+	return c.call(ctx, base, key, secret, roomService, "UpdateParticipant", map[string]any{
 		"room":       room,
 		"identity":   identity,
 		"permission": permission,
@@ -97,7 +114,7 @@ func (c *client) setPermission(ctx context.Context, base, key, secret, room, ide
 
 // deleteRoom closes a LiveKit room and disconnects everyone in it.
 func (c *client) deleteRoom(ctx context.Context, base, key, secret, room string) error {
-	return c.call(ctx, base, key, secret, "DeleteRoom", map[string]string{"room": room})
+	return c.call(ctx, base, key, secret, roomService, "DeleteRoom", map[string]string{"room": room})
 }
 
 // httpBase turns the configured client URL into the base for the server API.

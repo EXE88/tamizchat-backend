@@ -40,16 +40,19 @@ type videoGrant struct {
 
 // claims is the JWT payload LiveKit expects.
 type claims struct {
-	Issuer     string     `json:"iss"`
-	Subject    string     `json:"sub,omitempty"`
-	Name       string     `json:"name,omitempty"`
-	NotBefore  int64      `json:"nbf"`
-	Expiry     int64      `json:"exp"`
-	JTI        string     `json:"jti,omitempty"`
-	Video      videoGrant `json:"video"`
-	Metadata   string     `json:"metadata,omitempty"`
-	Identity   string     `json:"-"`
-	SharedRoom string     `json:"-"`
+	Issuer    string     `json:"iss"`
+	Subject   string     `json:"sub,omitempty"`
+	Name      string     `json:"name,omitempty"`
+	NotBefore int64      `json:"nbf"`
+	Expiry    int64      `json:"exp"`
+	JTI       string     `json:"jti,omitempty"`
+	Video     videoGrant `json:"video"`
+	Metadata  string     `json:"metadata,omitempty"`
+	// SHA256 is only used when signing a webhook, where the claim carries the
+	// hash of the body rather than any grant.
+	SHA256     string `json:"sha256,omitempty"`
+	Identity   string `json:"-"`
+	SharedRoom string `json:"-"`
 }
 
 // Publishable track sources, as LiveKit names them.

@@ -167,6 +167,13 @@ func (g *Gateway) dispatch(ctx context.Context, sess *session.Session, data []by
 	case protocol.TypePaintState:
 		g.handlePaintState(sess, env)
 
+	case protocol.TypeBotList:
+		g.handleBotList(sess, env)
+	case protocol.TypeBotControl:
+		g.handleBotControl(ctx, sess, env)
+	case protocol.TypeBotMove:
+		g.handleBotMove(ctx, sess, env)
+
 	case protocol.TypeHello:
 		sess.SendError(env.ID, protocol.ErrBadRequest, "hello فقط یک‌بار در ابتدای اتصال پذیرفته می‌شود")
 

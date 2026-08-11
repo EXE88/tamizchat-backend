@@ -149,6 +149,27 @@ WHERE id IN ('role-default', 'role-admin');`,
 UPDATE roles SET permissions = permissions | 32768
 WHERE id IN ('role-default', 'role-admin');`,
 	},
+	{
+		// Bots are configured by the server operator from the panel, so unlike
+		// room contents their definition is persistent. What a bot is *doing*
+		// right now — which track, which room — is runtime state and is not
+		// stored: a restart leaves every bot idle.
+		name: "0008_bots",
+		stmt: `
+CREATE TABLE bots (
+	id         TEXT PRIMARY KEY,
+	name       TEXT NOT NULL,
+	kind       TEXT NOT NULL DEFAULT 'music',
+	folder     TEXT NOT NULL DEFAULT '',
+	color      TEXT NOT NULL DEFAULT '',
+	loop_queue INTEGER NOT NULL DEFAULT 1,
+	shuffle    INTEGER NOT NULL DEFAULT 0,
+	enabled    INTEGER NOT NULL DEFAULT 1,
+	created_at INTEGER NOT NULL
+) STRICT;
+
+CREATE UNIQUE INDEX idx_bots_name ON bots (name COLLATE NOCASE);`,
+	},
 }
 
 func (s *Store) migrate(ctx context.Context) error {

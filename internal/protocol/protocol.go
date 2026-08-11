@@ -66,6 +66,10 @@ const (
 	TypePaintUndo   = "paint.undo"
 	TypePaintClear  = "paint.clear"
 	TypePaintState  = "paint.state"
+
+	TypeBotList    = "bot.list"
+	TypeBotControl = "bot.control"
+	TypeBotMove    = "bot.move"
 )
 
 // Frame types sent by the server.
@@ -117,6 +121,9 @@ const (
 	TypePaintUndone   = "paint.undo"
 	TypePaintCleared  = "paint.clear"
 	TypePaintSnapshot = "paint.state"
+
+	TypeBots     = "bot.list"
+	TypeBotState = "bot.state"
 )
 
 // Error codes. The client shows its own localized text per code, so these
@@ -169,6 +176,11 @@ const (
 	ErrPaintFull     = "paint_board_full"
 	ErrPaintNotFound = "paint_stroke_not_found"
 	ErrPaintInvalid  = "paint_invalid"
+
+	ErrBotNotFound = "bot_not_found"
+	ErrBotDisabled = "bot_disabled"
+	ErrBotEmpty    = "bot_queue_empty"
+	ErrBotAction   = "bot_bad_action"
 )
 
 // Reasons a session ends, reported in user.left and in the close frame.
@@ -422,6 +434,69 @@ type FileDownloadRequest struct {
 	FileID string `json:"file_id"`
 }
 
+// Bot playback states.
+const (
+	BotIdle    = "idle"    // not in any room
+	BotStopped = "stopped" // in a room, not playing
+	BotPlaying = "playing"
+)
+
+// Bot control actions.
+const (
+	BotActionPlay   = "play"
+	BotActionStop   = "stop"
+	BotActionNext   = "next"
+	BotActionPrev   = "prev"
+	BotActionSelect = "select"
+)
+
+// BotTrack is one entry of a bot's queue. Only the title travels: the path on
+// the server is nobody's business.
+type BotTrack struct {
+	Index int    `json:"index"`
+	Title string `json:"title"`
+}
+
+// Bot is the public view of a bot: its identity plus what it is doing now.
+type Bot struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Kind   string `json:"kind"`
+	Color  string `json:"color,omitempty"`
+	RoomID string `json:"room_id"`
+	State  string `json:"state"`
+	// Track is what is playing, or the track that would play next.
+	Track      *BotTrack `json:"track,omitempty"`
+	TrackCount int       `json:"track_count"`
+	Loop       bool      `json:"loop"`
+	Shuffle    bool      `json:"shuffle"`
+	Enabled    bool      `json:"enabled"`
+}
+
+// BotList is the reply to bot.list.
+type BotList struct {
+	Bots []Bot `json:"bots"`
+}
+
+// BotControl drives playback. TrackIndex is only read for the "select" action.
+type BotControl struct {
+	BotID      string `json:"bot_id"`
+	Action     string `json:"action"`
+	TrackIndex int    `json:"track_index,omitempty"`
+}
+
+// BotMove sends a bot to a room, or out of every room when RoomID is empty.
+type BotMove struct {
+	BotID  string `json:"bot_id"`
+	RoomID string `json:"room_id"`
+}
+
+// BotQueue is the full track list, for the panel a client shows on a bot.
+type BotQueue struct {
+	BotID  string     `json:"bot_id"`
+	Tracks []BotTrack `json:"tracks"`
+}
+
 // Paint tools.
 const (
 	ToolPen     = "pen"
@@ -620,6 +695,7 @@ type Welcome struct {
 	Users      []User     `json:"users"`
 	Rooms      []Room     `json:"rooms"`
 	Roles      []Role     `json:"roles"`
+	Bots       []Bot      `json:"bots"`
 	Limits     UserLimits `json:"limits"`
 	// Permissions is what *you* may do, expanded so the client can hide the
 	// controls you cannot use. The server checks again on every request.

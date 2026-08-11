@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -20,13 +21,23 @@ import (
 type fakeLiveKit struct {
 	srv *httptest.Server
 
-	mu    sync.Mutex
-	calls []liveKitCall
+	mu      sync.Mutex
+	calls   []liveKitCall
+	created int
+}
+
+// next numbers the ingresses this fake hands out.
+func (f *fakeLiveKit) next() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.created++
+	return f.created
 }
 
 type liveKitCall struct {
 	Method string
 	Body   map[string]any
+	Reply  map[string]any
 	Auth   string
 }
 
@@ -39,19 +50,42 @@ func newFakeLiveKit(t *testing.T) *fakeLiveKit {
 		var body map[string]any
 		_ = json.Unmarshal(raw, &body)
 
+		method := r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:]
+
+		// CreateIngress is the one call whose reply matters: the id it returns
+		// is what stops that ingress again.
+		reply := map[string]any{}
+		if method == "CreateIngress" {
+			reply["ingressId"] = "ingress-" + strconv.Itoa(f.next())
+			reply["roomName"] = body["room_name"]
+		}
+
 		f.mu.Lock()
 		f.calls = append(f.calls, liveKitCall{
-			Method: r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:],
+			Method: method,
 			Body:   body,
+			Reply:  reply,
 			Auth:   r.Header.Get("Authorization"),
 		})
 		f.mu.Unlock()
 
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte("{}"))
+		_ = json.NewEncoder(w).Encode(reply)
 	}))
 	t.Cleanup(f.srv.Close)
 	return f
+}
+
+// lastCall returns the most recent call to a method, if any.
+func (f *fakeLiveKit) lastCall(method string) (liveKitCall, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for i := len(f.calls) - 1; i >= 0; i-- {
+		if f.calls[i].Method == method {
+			return f.calls[i], true
+		}
+	}
+	return liveKitCall{}, false
 }
 
 // waitFor blocks until a call to method arrives, and returns it.

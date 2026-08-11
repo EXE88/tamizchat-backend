@@ -125,6 +125,11 @@ func uploadError(err error) (int, string, string) {
 	}
 }
 
+// readLimited reads a request body with a hard ceiling.
+func readLimited(r *http.Request, max int64) ([]byte, error) {
+	return io.ReadAll(io.LimitReader(r.Body, max))
+}
+
 func errorBody(code, message string) map[string]any {
 	return map[string]any{"error": map[string]string{"code": code, "message": message}}
 }

@@ -15,6 +15,7 @@ import (
 
 	"tamizchat/internal/access"
 	"tamizchat/internal/authz"
+	"tamizchat/internal/bots"
 	"tamizchat/internal/chat"
 	"tamizchat/internal/config"
 	"tamizchat/internal/files"
@@ -51,6 +52,7 @@ type fixture struct {
 	access   *access.Manager
 	files    *files.Manager
 	paint    *paint.Manager
+	bots     *bots.Manager
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -106,8 +108,14 @@ func newFixture(t *testing.T) *fixture {
 
 	paintMgr := paint.NewManager(cfg, roomMgr, accessMgr, accessMgr)
 
+	botMgr, err := bots.New(ctx, cfg, store, mediaMgr, roomMgr, sessions)
+	if err != nil {
+		t.Fatalf("bot manager: %v", err)
+	}
+	roomMgr.OnDelete(botMgr.RoomGone)
+
 	gw := gateway.New(cfg, sessions, roomMgr, chatMgr, fileMgr, mediaMgr,
-		paintMgr, accessMgr, store, "server-uuid")
+		paintMgr, botMgr, accessMgr, store, "server-uuid")
 
 	// The tests drive the real HTTP surface, so the upload and download routes
 	// are exercised exactly as a client would reach them.
@@ -122,17 +130,37 @@ func newFixture(t *testing.T) *fixture {
 			return int64(cfg.Int(config.KeyUploadsMaxSizeMB)) << 20
 		},
 		OnUpload: gw.AnnounceUpload,
+		Bots:     botMgr,
+		Webhooks: webhookVerifier{media: mediaMgr, bots: botMgr},
 	}))
 	t.Cleanup(srv.Close)
 
 	f := &fixture{srv: srv, httpURL: srv.URL, cfg: cfg, store: store, sessions: sessions,
-		rooms: roomMgr, access: accessMgr, files: fileMgr, paint: paintMgr}
+		rooms: roomMgr, access: accessMgr, files: fileMgr, paint: paintMgr, bots: botMgr}
 
 	// uuidA is the fixture's administrator. Most tests need someone who can
 	// create rooms; the tests about permissions use the other identities,
 	// which hold only the default role.
 	f.makeAdmin(t, uuidA)
 	return f
+}
+
+// webhookVerifier mirrors the wiring app.Run does, so the tests exercise the
+// same path a real LiveKit callback takes.
+type webhookVerifier struct {
+	media *media.Manager
+	bots  *bots.Manager
+}
+
+func (w webhookVerifier) HandleWebhook(ctx context.Context, authHeader string, body []byte) error {
+	event, err := w.media.VerifyWebhook(authHeader, body)
+	if err != nil {
+		return err
+	}
+	if event.Event == media.EventIngressEnded {
+		w.bots.TrackEnded(ctx, event.Ingress.IngressID)
+	}
+	return nil
 }
 
 // defaultRolePermissionsWithout removes one permission from the role everybody

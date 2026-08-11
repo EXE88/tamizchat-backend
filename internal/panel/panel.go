@@ -93,6 +93,8 @@ func (p *Panel) mainMenu(ctx context.Context) error {
 			p.sanctionsMenu(ctx)
 		case "9":
 			p.showModLog(ctx)
+		case "10":
+			p.botsMenu(ctx)
 		case "0", "q", "exit":
 			p.println("")
 			return nil

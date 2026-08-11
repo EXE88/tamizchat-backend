@@ -16,6 +16,7 @@ import (
 
 	"tamizchat/internal/access"
 	"tamizchat/internal/authz"
+	"tamizchat/internal/bots"
 	"tamizchat/internal/chat"
 	"tamizchat/internal/config"
 	"tamizchat/internal/files"
@@ -54,6 +55,7 @@ type Gateway struct {
 	files    *files.Manager
 	media    *media.Manager
 	paint    *paint.Manager
+	bots     *bots.Manager
 	access   *access.Manager
 	users    Users
 	policy   authz.Policy
@@ -64,8 +66,8 @@ type Gateway struct {
 // permission policy, so there is a single source of truth for who may do what.
 func New(cfg *config.Config, sessions *session.Manager, roomMgr *rooms.Manager,
 	chatMgr *chat.Manager, fileMgr *files.Manager, mediaMgr *media.Manager,
-	paintMgr *paint.Manager, accessMgr *access.Manager, users Users,
-	serverUUID string) *Gateway {
+	paintMgr *paint.Manager, botMgr *bots.Manager, accessMgr *access.Manager,
+	users Users, serverUUID string) *Gateway {
 	return &Gateway{
 		cfg:      cfg,
 		sessions: sessions,
@@ -74,6 +76,7 @@ func New(cfg *config.Config, sessions *session.Manager, roomMgr *rooms.Manager,
 		files:    fileMgr,
 		media:    mediaMgr,
 		paint:    paintMgr,
+		bots:     botMgr,
 		access:   accessMgr,
 		users:    users,
 		policy:   accessMgr,
@@ -194,6 +197,7 @@ func (g *Gateway) handshake(ctx context.Context, conn *websocket.Conn, remote st
 		Users:      g.sessions.Users(),
 		Rooms:      g.rooms.Views(),
 		Roles:      g.roleViews(),
+		Bots:       g.bots.Views(),
 		Limits: protocol.UserLimits{
 			UsernameMin:     minLen,
 			UsernameMax:     maxLen,

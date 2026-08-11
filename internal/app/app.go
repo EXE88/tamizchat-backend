@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"tamizchat/internal/access"
+	"tamizchat/internal/bots"
 	"tamizchat/internal/chat"
 	"tamizchat/internal/config"
 	"tamizchat/internal/files"
@@ -85,8 +86,16 @@ func Run(ctx context.Context, opts Options) error {
 
 	paintMgr := paint.NewManager(cfg, roomMgr, accessMgr, accessMgr)
 
+	botMgr, err := bots.New(ctx, cfg, store, mediaMgr, roomMgr, sessions)
+	if err != nil {
+		return err
+	}
+	// A deleted room takes its bots out with it, rather than leaving them
+	// pointing at a room nobody can join.
+	roomMgr.OnDelete(botMgr.RoomGone)
+
 	gw := gateway.New(cfg, sessions, roomMgr, chatMgr, fileMgr, mediaMgr,
-		paintMgr, accessMgr, store, serverUUID)
+		paintMgr, botMgr, accessMgr, store, serverUUID)
 
 	handler := httpapi.Handler(httpapi.Deps{
 		Config:      cfg,
@@ -99,6 +108,8 @@ func Run(ctx context.Context, opts Options) error {
 			return int64(cfg.Int(config.KeyUploadsMaxSizeMB)) << 20
 		},
 		OnUpload: gw.AnnounceUpload,
+		Bots:     botMgr,
+		Webhooks: webhookRouter{media: mediaMgr, bots: botMgr},
 	})
 
 	addr := cfg.String(config.KeyListenAddr)
