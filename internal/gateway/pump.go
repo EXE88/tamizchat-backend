@@ -148,6 +148,11 @@ func (g *Gateway) dispatch(ctx context.Context, sess *session.Session, data []by
 	case protocol.TypeFileDownloadToken:
 		g.handleFileDownloadToken(sess, env)
 
+	case protocol.TypeMediaToken:
+		g.handleMediaToken(sess, env)
+	case protocol.TypeMediaSetState:
+		g.handleMediaSetState(sess, env)
+
 	case protocol.TypeHello:
 		sess.SendError(env.ID, protocol.ErrBadRequest, "hello فقط یک‌بار در ابتدای اتصال پذیرفته می‌شود")
 

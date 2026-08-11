@@ -89,6 +89,9 @@ func (g *Gateway) handleAdminKick(ctx context.Context, sess *session.Session, en
 		Reason:     req.Reason,
 	}
 
+	// The media session goes with them: a kicked user must not keep talking.
+	g.dropFromMedia(victim)
+
 	// The victim is told first, then everyone else, then the socket goes down.
 	_ = victim.SendMessage(protocol.TypeUserKicked, "", event)
 	g.broadcastExcept(protocol.TypeUserKicked, event, victim.ClientUUID, sess.ClientUUID)
@@ -129,6 +132,7 @@ func (g *Gateway) handleAdminBan(ctx context.Context, sess *session.Session, env
 		ExpiresAt:  sanction.ExpiresAt,
 	}
 
+	g.dropFromMedia(victim)
 	_ = victim.SendMessage(protocol.TypeUserBanned, "", event)
 	g.broadcastExcept(protocol.TypeUserBanned, event, victim.ClientUUID, sess.ClientUUID)
 	victim.Close(protocol.ReasonBanned)
@@ -219,6 +223,9 @@ func (g *Gateway) handleAdminMute(ctx context.Context, sess *session.Session, en
 		return
 	}
 	victim.SetMuted(true)
+	// A mute has to reach LiveKit, or the muted user keeps speaking over
+	// everyone while their chat is silenced.
+	g.syncMedia(victim.ClientUUID)
 
 	event := protocol.Moderation{
 		ClientUUID: victim.ClientUUID,

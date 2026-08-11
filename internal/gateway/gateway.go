@@ -19,6 +19,7 @@ import (
 	"tamizchat/internal/chat"
 	"tamizchat/internal/config"
 	"tamizchat/internal/files"
+	"tamizchat/internal/media"
 	"tamizchat/internal/protocol"
 	"tamizchat/internal/rooms"
 	"tamizchat/internal/session"
@@ -50,6 +51,7 @@ type Gateway struct {
 	rooms    *rooms.Manager
 	chat     *chat.Manager
 	files    *files.Manager
+	media    *media.Manager
 	access   *access.Manager
 	users    Users
 	policy   authz.Policy
@@ -59,14 +61,15 @@ type Gateway struct {
 // New builds a gateway. The access manager is both the role store and the
 // permission policy, so there is a single source of truth for who may do what.
 func New(cfg *config.Config, sessions *session.Manager, roomMgr *rooms.Manager,
-	chatMgr *chat.Manager, fileMgr *files.Manager, accessMgr *access.Manager,
-	users Users, serverUUID string) *Gateway {
+	chatMgr *chat.Manager, fileMgr *files.Manager, mediaMgr *media.Manager,
+	accessMgr *access.Manager, users Users, serverUUID string) *Gateway {
 	return &Gateway{
 		cfg:      cfg,
 		sessions: sessions,
 		rooms:    roomMgr,
 		chat:     chatMgr,
 		files:    fileMgr,
+		media:    mediaMgr,
 		access:   accessMgr,
 		users:    users,
 		policy:   accessMgr,
@@ -194,6 +197,7 @@ func (g *Gateway) handshake(ctx context.Context, conn *websocket.Conn, remote st
 			MessageMax:      g.cfg.Int(config.KeyChatMaxMessageLen),
 			HistoryLimit:    g.cfg.Int(config.KeyRoomsHistoryLimit),
 			StickersEnabled: g.cfg.Bool(config.KeyChatStickersEnabled),
+			MediaEnabled:    g.media.Enabled(),
 		},
 		Permissions: authz.Keys(g.permissionsOf(clientUUID)),
 	}

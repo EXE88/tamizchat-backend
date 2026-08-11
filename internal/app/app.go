@@ -18,6 +18,7 @@ import (
 	"tamizchat/internal/gateway"
 	"tamizchat/internal/httpapi"
 	"tamizchat/internal/logging"
+	"tamizchat/internal/media"
 	"tamizchat/internal/protocol"
 	"tamizchat/internal/rooms"
 	"tamizchat/internal/session"
@@ -75,7 +76,13 @@ func Run(ctx context.Context, opts Options) error {
 		return err
 	}
 
-	gw := gateway.New(cfg, sessions, roomMgr, chatMgr, fileMgr, accessMgr, store, serverUUID)
+	mediaMgr := media.New(cfg, accessMgr, accessMgr)
+	// Leaving a room ends the media session for it, whatever the reason:
+	// leaving on purpose, switching rooms, being moved, or disconnecting.
+	roomMgr.OnMemberLeft(mediaMgr.Disconnect)
+	roomMgr.OnDelete(mediaMgr.CloseRoom)
+
+	gw := gateway.New(cfg, sessions, roomMgr, chatMgr, fileMgr, mediaMgr, accessMgr, store, serverUUID)
 
 	handler := httpapi.Handler(httpapi.Deps{
 		Config:      cfg,

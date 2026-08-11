@@ -128,6 +128,19 @@ CREATE INDEX idx_mod_log_at ON mod_log (at DESC);
 
 ALTER TABLE rooms ADD COLUMN required_role_id TEXT NOT NULL DEFAULT '';`,
 	},
+	{
+		// Phase 7 added three permission bits: speak (4096), publish_video
+		// (8192) and share_screen (16384). A server that was already running
+		// has roles predating them, and a role without those bits would
+		// silently lose the ability to talk. Grant them where they belong.
+		//
+		// This is the pattern for every future permission: add the bit in
+		// authz, then hand it to the existing roles here.
+		name: "0006_media_permissions",
+		stmt: `
+UPDATE roles SET permissions = permissions | 28672
+WHERE id IN ('role-default', 'role-admin');`,
+	},
 }
 
 func (s *Store) migrate(ctx context.Context) error {

@@ -92,9 +92,19 @@ type Manager struct {
 	global Broadcaster
 	access Access
 
-	mu       sync.RWMutex
-	rooms    map[string]*Room
-	onDelete []func(roomID string)
+	mu           sync.RWMutex
+	rooms        map[string]*Room
+	onDelete     []func(roomID string)
+	onMemberLeft []func(clientUUID, roomID string)
+}
+
+// OnMemberLeft registers a callback fired whenever someone stops being a member
+// of a room — leaving, switching, being moved, or dropping off the server. The
+// media layer uses it to end that user's LiveKit session for the room.
+func (m *Manager) OnMemberLeft(fn func(clientUUID, roomID string)) {
+	m.mu.Lock()
+	m.onMemberLeft = append(m.onMemberLeft, fn)
+	m.mu.Unlock()
 }
 
 // OnDelete registers a callback fired after a room is removed, so packages that
@@ -465,10 +475,19 @@ func (m *Manager) leaveRoom(sess *session.Session, roomID, reason string) {
 	if sess.RoomID() == roomID {
 		sess.SetRoomID("")
 	}
+	// Whatever they had switched on belongs to the room they just left.
+	sess.SetMedia(protocol.MediaState{})
 
 	m.global.Broadcast(protocol.TypeRoomMemberLeft, protocol.RoomMember{
 		RoomID: roomID, User: sess.User(), Reason: reason,
 	}, sess.ClientUUID)
+
+	m.mu.RLock()
+	listeners := append([]func(string, string){}, m.onMemberLeft...)
+	m.mu.RUnlock()
+	for _, fn := range listeners {
+		fn(sess.ClientUUID, roomID)
+	}
 
 	if remaining == 0 {
 		m.schedulePurge(room)

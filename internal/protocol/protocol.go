@@ -56,6 +56,9 @@ const (
 
 	TypeFileUploadRequest = "file.upload_request"
 	TypeFileDownloadToken = "file.download_token"
+
+	TypeMediaToken    = "media.token"
+	TypeMediaSetState = "media.set_state"
 )
 
 // Frame types sent by the server.
@@ -97,6 +100,9 @@ const (
 
 	TypeFileUploadTicket = "file.upload_ticket"
 	TypeFileDownload     = "file.download"
+
+	TypeMediaCredentials = "media.token"
+	TypeMediaState       = "media.state"
 )
 
 // Error codes. The client shows its own localized text per code, so these
@@ -142,6 +148,8 @@ const (
 	ErrRoomQuotaFull   = "room_quota_exceeded"
 	ErrFileNotFound    = "file_not_found"
 	ErrFileInvalid     = "file_invalid"
+
+	ErrMediaDisabled = "media_disabled"
 )
 
 // Reasons a session ends, reported in user.left and in the close frame.
@@ -175,6 +183,10 @@ type User struct {
 	// client looks their names and colours up in the role list from welcome.
 	Roles []string `json:"roles,omitempty"`
 	Muted bool     `json:"muted,omitempty"`
+	// Media is what the user currently has switched on, as reported by their
+	// client. Whether they are *speaking* right now is not here: that changes
+	// many times a second and LiveKit already tells every client directly.
+	Media MediaState `json:"media"`
 }
 
 // Room is the public view of a room. The password itself is never sent; only
@@ -391,6 +403,37 @@ type FileDownloadRequest struct {
 	FileID string `json:"file_id"`
 }
 
+// MediaToken is everything a client needs to join the room's LiveKit session.
+// The can_* flags mirror what the token actually grants, so the client can grey
+// out a control instead of trying and being refused by LiveKit.
+type MediaToken struct {
+	URL             string `json:"url"`
+	Token           string `json:"token"`
+	Room            string `json:"room"`
+	Identity        string `json:"identity"`
+	ExpiresAt       int64  `json:"expires_at"`
+	CanSpeak        bool   `json:"can_speak"`
+	CanPublishVideo bool   `json:"can_publish_video"`
+	CanShareScreen  bool   `json:"can_share_screen"`
+}
+
+// MediaState is what a user currently has switched on. It is reported by the
+// client, because only the client knows whether its camera is actually on;
+// what a user is *allowed* to switch on is decided by the server and enforced
+// by LiveKit.
+type MediaState struct {
+	Mic    bool `json:"mic"`
+	Cam    bool `json:"cam"`
+	Screen bool `json:"screen"`
+}
+
+// MediaStateEvent announces someone's media state to the server.
+type MediaStateEvent struct {
+	ClientUUID string     `json:"client_uuid"`
+	RoomID     string     `json:"room_id"`
+	State      MediaState `json:"state"`
+}
+
 // FileDownload is a short-lived link. ThumbURL is empty for non-images.
 type FileDownload struct {
 	FileID    string `json:"file_id"`
@@ -493,6 +536,7 @@ type UserLimits struct {
 	MessageMax      int  `json:"message_max"`
 	HistoryLimit    int  `json:"history_limit"`
 	StickersEnabled bool `json:"stickers_enabled"`
+	MediaEnabled    bool `json:"media_enabled"`
 }
 
 // Error is the payload of an error frame.

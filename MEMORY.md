@@ -3,7 +3,7 @@
 این فایل حافظهٔ بین‌چتی است. در شروع هر گفتگوی جدید اول این فایل را بخوان،
 و در پایان هر کار «وضعیت فعلی» و «تصمیم‌ها» را به‌روزرسانی کن.
 
-آخرین به‌روزرسانی: ۱۴۰۵/۰۵/۲۰ (2026-08-11) — پایان فاز ۶
+آخرین به‌روزرسانی: ۱۴۰۵/۰۵/۲۰ (2026-08-11) — پایان فاز ۷
 
 ---
 
@@ -51,7 +51,7 @@ voice changer، پخش صدای مخصوص هنگام kick، پخش صدای م�
 
 ## وضعیت فعلی
 
-**فازهای ۱ تا ۶ تمام شدند و تست دارند** (۱۱۵ تست، همه سبز).
+**فازهای ۱ تا ۷ تمام شدند و تست دارند** (۱۳۹ تست، همه سبز).
 جزئیات فازها در [docs/ROADMAP.md](docs/ROADMAP.md) و قرارداد سیم در
 [docs/PROTOCOL.md](docs/PROTOCOL.md).
 
@@ -62,7 +62,7 @@ backend/
   internal/config/schema.go      رجیستری تایپ‌دار تنظیمات (منبع حقیقت پنل)
   internal/config/config.go      نمای زندهٔ کانفیگ + Set/Reset/Watch
   internal/storage/store.go      باز کردن SQLite با WAL
-  internal/storage/migrations.go مهاجرت‌های forward-only (۰۰۰۱ تا ۰۰۰۵)
+  internal/storage/migrations.go مهاجرت‌های forward-only (۰۰۰۱ تا ۰۰۰۶)
   internal/storage/settings.go   settings + server_uuid + NewUUID
   internal/storage/users.go      جدول users: اولین/آخرین حضور، تعداد بازدید
   internal/storage/rooms.go      CRUD تعریف دائمی روم‌ها
@@ -81,6 +81,9 @@ backend/
   internal/files/manager.go      تیکت آپلود، سهمیه، لینک دانلود
   internal/files/files.go        فایل‌های هر روم (پیاده‌سازی Ephemeral)
   internal/files/thumbnail.go    تصویر بندانگشتی بدون وابستگی بیرونی
+  internal/media/token.go        امضای JWT لایوکیت + گرنت‌ها
+  internal/media/client.go       کلاینت Twirp برای RoomService لایوکیت
+  internal/media/manager.go      صدور توکن و اعمال مدیریت روی مدیا
   internal/authz/                بیت‌مسک مجوزها + اینترفیس Policy
   internal/access/               رول‌ها، مجوزها، بن و میوت — همه در حافظه
   internal/gateway/gateway.go    upgrade + handshake
@@ -90,6 +93,7 @@ backend/
   internal/gateway/admin.go      کیک/بن/میوت/موو + پخش رویدادهای مدیریتی
   internal/gateway/roles.go      CRUD رول و انتساب، محاسبهٔ مجوزهای کاربر
   internal/gateway/files.go      تیکت آپلود و لینک دانلود روی سوکت
+  internal/gateway/media.go      توکن مدیا و وضعیت میکروفون/دوربین
   internal/httpapi/files.go      POST /api/v1/upload و GET /api/v1/file/{id}
   internal/panel/access.go       رول‌ها، بن‌ها و لاگ در پنل
   internal/httpapi/              /healthz و /api/v1/server-info و /ws
@@ -201,11 +205,32 @@ backend/
 - کوچک‌سازی تصویر با میانگین‌گیری سطحی نوشته شد نه nearest-neighbour، چون
   nearest روی عکس واقعی نتیجهٔ دانه‌دانه و خراب می‌دهد. بدون وابستگی جدید.
 
+### قواعد مهمی که در فاز ۷ تثبیت شد
+
+- **SDK لایوکیت اضافه نشد.** توکن یک JWT/HS256 ساده است و RoomService هم
+  Twirp روی HTTP+JSON؛ هر دو مستقیم پیاده شدند. SDK یک استک کامل WebRTC را
+  به سروری می‌آورد که هرگز بستهٔ RTP لمس نمی‌کند.
+- گرنت توکن باید مجوزها را منعکس کند (`canPublishSources`). پرچم‌های `can_*`
+  فقط برای رابط کاربری‌اند؛ اعمال واقعی سمت LiveKit است.
+- **بیت‌های مجوز قفل شده‌اند** با تست `TestPermissionBitsAreStable`. هر مجوز
+  جدید = یک بیت جدید در انتها + یک مهاجرت که آن را به رول‌های موجود می‌دهد
+  (الگویش مهاجرت ۰۰۰۶ است). جابه‌جا کردن بیت‌ها یعنی رول‌های موجود معنی
+  عوض می‌کنند.
+- تمام تماس‌های LiveKit **best-effort با timeout** هستند و در goroutine جدا
+  اجرا می‌شوند. خرابی یا نبود LiveKit نباید چت را زمین بزند.
+- میوت باید به LiveKit برسد (`UpdateParticipant`)، وگرنه کاربر میوت‌شده در
+  چت ساکت است ولی روی صدا همچنان حرف می‌زند.
+- وضعیت «در حال صحبت» عمداً سمت سرور نگه داشته نمی‌شود — LiveKit خودش رویداد
+  active speaker را به کلاینت می‌دهد. فقط mic/cam/screen که خود کلاینت گزارش
+  می‌دهد نگه داشته می‌شود، و با خروج از روم ریست می‌شود.
+- `rooms.Manager.OnMemberLeft` قلاب مرکزی خروج از روم است (خروج عادی، تعویض
+  روم، جابه‌جایی توسط ادمین، قطع اتصال). فازهای بعدی هم از همین استفاده کنند.
+
 ## قدم بعدی
 
-فاز ۷: ویس/ویدیو/اسکرین‌شیر با LiveKit — صدور توکن با کلید و سکرت، نگاشت روم
-TamizChat به روم LiveKit، اعمال میوت/کیک سمت سرور روی شرکت‌کنندهٔ LiveKit، و
-انتشار وضعیت صحبت‌کردن و دوربین در رویدادهای presence.
+فاز ۸: Paint board بلادرنگ — کانال رویداد نقاشی در روم (stroke/clear/undo)،
+نگهداری بوم در حافظهٔ روم و ارسال وضعیت اولیه به تازه‌واردها، سقف تعداد stroke.
+بوم هم باید خودش را به‌عنوان `rooms.Ephemeral` ثبت کند.
 
 ## قواعد کار
 

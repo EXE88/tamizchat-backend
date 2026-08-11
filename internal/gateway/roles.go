@@ -213,6 +213,8 @@ func (g *Gateway) announceRoles(clientUUID string) {
 		target.SetRoles(ids)
 		_ = target.SendMessage(protocol.TypeUserRolesChanged, "", event)
 		g.sessions.Broadcast(protocol.TypeUserUpdated, target.User(), clientUUID)
+		// Roles decide what may be published, so LiveKit has to hear about it.
+		g.syncMedia(clientUUID)
 	}
 }
 

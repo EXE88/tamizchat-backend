@@ -24,6 +24,9 @@ const (
 	PermManageRoles
 	PermUploadFiles
 	PermControlBots
+	PermSpeak
+	PermPublishVideo
+	PermShareScreen
 )
 
 // Descriptor documents one permission for the admin panel and the client.
@@ -45,6 +48,9 @@ var All = []Descriptor{
 	{PermBan, "ban", "بن کردن کاربر"},
 	{PermMute, "mute", "میوت کردن کاربر"},
 	{PermMoveUsers, "move_users", "جابه‌جایی کاربر بین روم‌ها"},
+	{PermSpeak, "speak", "صحبت کردن با میکروفون"},
+	{PermPublishVideo, "publish_video", "روشن کردن دوربین"},
+	{PermShareScreen, "share_screen", "اشتراک صفحه"},
 	{PermManageRoles, "manage_roles", "مدیریت رول‌ها و انتساب آن‌ها"},
 	{PermControlBots, "control_bots", "کنترل بات‌ها"},
 }

@@ -101,11 +101,12 @@ func (m *Manager) seed(ctx context.Context) error {
 	}
 
 	roles := []storage.Role{{
-		ID:          storage.RoleIDDefault,
-		Name:        "کاربر",
-		Permissions: uint64(authz.PermSendMessages | authz.PermUploadFiles),
-		Priority:    0,
-		IsDefault:   true,
+		ID:   storage.RoleIDDefault,
+		Name: "کاربر",
+		Permissions: uint64(authz.PermSendMessages | authz.PermUploadFiles |
+			authz.PermSpeak | authz.PermPublishVideo | authz.PermShareScreen),
+		Priority:  0,
+		IsDefault: true,
 	}, {
 		ID:          storage.RoleIDAdmin,
 		Name:        "ادمین",

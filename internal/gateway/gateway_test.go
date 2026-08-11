@@ -20,6 +20,7 @@ import (
 	"tamizchat/internal/files"
 	"tamizchat/internal/gateway"
 	"tamizchat/internal/httpapi"
+	"tamizchat/internal/media"
 	"tamizchat/internal/protocol"
 	"tamizchat/internal/rooms"
 	"tamizchat/internal/session"
@@ -97,7 +98,11 @@ func newFixture(t *testing.T) *fixture {
 		t.Fatalf("file manager: %v", err)
 	}
 
-	gw := gateway.New(cfg, sessions, roomMgr, chatMgr, fileMgr, accessMgr, store, "server-uuid")
+	mediaMgr := media.New(cfg, accessMgr, accessMgr)
+	roomMgr.OnMemberLeft(mediaMgr.Disconnect)
+	roomMgr.OnDelete(mediaMgr.CloseRoom)
+
+	gw := gateway.New(cfg, sessions, roomMgr, chatMgr, fileMgr, mediaMgr, accessMgr, store, "server-uuid")
 
 	// The tests drive the real HTTP surface, so the upload and download routes
 	// are exercised exactly as a client would reach them.

@@ -31,6 +31,7 @@ type Session struct {
 	roomID   string
 	roles    []string
 	muted    bool
+	media    protocol.MediaState
 	closed   bool
 	reason   string
 
@@ -91,6 +92,21 @@ func (s *Session) SetRoles(roles []string) {
 	s.mu.Unlock()
 }
 
+// SetMedia records what the user has switched on. Leaving a room resets it:
+// a microphone icon must not linger next to someone who is no longer there.
+func (s *Session) SetMedia(state protocol.MediaState) {
+	s.mu.Lock()
+	s.media = state
+	s.mu.Unlock()
+}
+
+// Media is the user's current media state.
+func (s *Session) Media() protocol.MediaState {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.media
+}
+
 // SetMuted records whether the user is currently muted.
 func (s *Session) SetMuted(muted bool) {
 	s.mu.Lock()
@@ -109,6 +125,7 @@ func (s *Session) User() protocol.User {
 		RoomID:     s.roomID,
 		Roles:      append([]string(nil), s.roles...),
 		Muted:      s.muted,
+		Media:      s.media,
 	}
 }
 
