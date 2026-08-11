@@ -143,6 +143,11 @@ func (g *Gateway) dispatch(ctx context.Context, sess *session.Session, data []by
 	case protocol.TypeAdminRoleRevoke:
 		g.handleRoleRevoke(ctx, sess, env)
 
+	case protocol.TypeFileUploadRequest:
+		g.handleFileUploadRequest(sess, env)
+	case protocol.TypeFileDownloadToken:
+		g.handleFileDownloadToken(sess, env)
+
 	case protocol.TypeHello:
 		sess.SendError(env.ID, protocol.ErrBadRequest, "hello فقط یک‌بار در ابتدای اتصال پذیرفته می‌شود")
 

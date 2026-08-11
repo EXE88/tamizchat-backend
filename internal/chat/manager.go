@@ -142,6 +142,32 @@ func (m *Manager) Send(sess *session.Session, req protocol.ChatSend) (protocol.M
 	return stored, nil
 }
 
+// PostAttachment publishes an uploaded file as a message in the sender's room.
+// It skips the rate limit: the upload itself was already gated by a ticket, a
+// permission check and the room quota, which is a far tighter budget than the
+// message rate.
+func (m *Manager) PostAttachment(sess *session.Session, attachment protocol.Attachment) (protocol.Message, error) {
+	room, err := m.currentRoom(sess)
+	if err != nil {
+		return protocol.Message{}, err
+	}
+	if m.sanctions.IsMuted(sess.ClientUUID) {
+		return protocol.Message{}, ErrMuted
+	}
+
+	stored := m.bufferFor(room).Append(protocol.Message{
+		Author:     sess.User(),
+		Kind:       protocol.MessageFile,
+		Attachment: &attachment,
+		CreatedAt:  time.Now().Unix(),
+	})
+
+	// Everyone in the room hears about it, the uploader included: unlike a chat
+	// message, the upload was confirmed over HTTP, not over this socket.
+	room.Broadcast(protocol.TypeChatMessage, stored, "")
+	return stored, nil
+}
+
 // History returns a page of the current room's messages.
 func (m *Manager) History(sess *session.Session, req protocol.ChatHistoryRequest) (protocol.ChatHistory, error) {
 	room, err := m.currentRoom(sess)

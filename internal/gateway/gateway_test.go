@@ -14,9 +14,12 @@ import (
 	"github.com/coder/websocket"
 
 	"tamizchat/internal/access"
+	"tamizchat/internal/authz"
 	"tamizchat/internal/chat"
 	"tamizchat/internal/config"
+	"tamizchat/internal/files"
 	"tamizchat/internal/gateway"
+	"tamizchat/internal/httpapi"
 	"tamizchat/internal/protocol"
 	"tamizchat/internal/rooms"
 	"tamizchat/internal/session"
@@ -38,11 +41,13 @@ func TestMain(m *testing.M) {
 
 type fixture struct {
 	srv      *httptest.Server
+	httpURL  string
 	cfg      *config.Config
 	store    *storage.Store
 	sessions *session.Manager
 	rooms    *rooms.Manager
 	access   *access.Manager
+	files    *files.Manager
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -82,20 +87,63 @@ func newFixture(t *testing.T) *fixture {
 		t.Fatalf("room manager: %v", err)
 	}
 
-	chatMgr := chat.NewManager(cfg, roomMgr, accessMgr, accessMgr)
-	gw := gateway.New(cfg, sessions, roomMgr, chatMgr, accessMgr, store, "server-uuid")
+	if err := cfg.Set(ctx, config.KeyUploadsDir, filepath.Join(t.TempDir(), "uploads")); err != nil {
+		t.Fatalf("set upload dir: %v", err)
+	}
 
-	srv := httptest.NewServer(gw)
+	chatMgr := chat.NewManager(cfg, roomMgr, accessMgr, accessMgr)
+	fileMgr, err := files.New(cfg, roomMgr, sessions, accessMgr)
+	if err != nil {
+		t.Fatalf("file manager: %v", err)
+	}
+
+	gw := gateway.New(cfg, sessions, roomMgr, chatMgr, fileMgr, accessMgr, store, "server-uuid")
+
+	// The tests drive the real HTTP surface, so the upload and download routes
+	// are exercised exactly as a client would reach them.
+	srv := httptest.NewServer(httpapi.Handler(httpapi.Deps{
+		Config:      cfg,
+		ServerUUID:  "server-uuid",
+		StartedAt:   time.Now(),
+		OnlineUsers: sessions.Count,
+		Gateway:     gw,
+		Files:       fileMgr,
+		MaxUploadBytes: func() int64 {
+			return int64(cfg.Int(config.KeyUploadsMaxSizeMB)) << 20
+		},
+		OnUpload: gw.AnnounceUpload,
+	}))
 	t.Cleanup(srv.Close)
 
-	f := &fixture{srv: srv, cfg: cfg, store: store, sessions: sessions,
-		rooms: roomMgr, access: accessMgr}
+	f := &fixture{srv: srv, httpURL: srv.URL, cfg: cfg, store: store, sessions: sessions,
+		rooms: roomMgr, access: accessMgr, files: fileMgr}
 
 	// uuidA is the fixture's administrator. Most tests need someone who can
 	// create rooms; the tests about permissions use the other identities,
 	// which hold only the default role.
 	f.makeAdmin(t, uuidA)
 	return f
+}
+
+// defaultRolePermissionsWithout removes one permission from the role everybody
+// holds, which is how a server operator restricts what ordinary users may do.
+func (f *fixture) defaultRolePermissionsWithout(t *testing.T, key string) {
+	t.Helper()
+	drop, ok := authz.Lookup(key)
+	if !ok {
+		t.Fatalf("unknown permission %q", key)
+	}
+
+	role, err := f.store.GetRole(context.Background(), storage.RoleIDDefault)
+	if err != nil {
+		t.Fatalf("get default role: %v", err)
+	}
+
+	perms := authz.Permission(role.Permissions) &^ drop.Perm
+	if _, err := f.access.UpdateRole(context.Background(), storage.RoleIDDefault,
+		access.RoleSpec{Permissions: &perms}); err != nil {
+		t.Fatalf("update default role: %v", err)
+	}
 }
 
 // makeAdmin grants the built-in admin role, the way an operator would from
@@ -114,7 +162,7 @@ type client struct {
 
 func (f *fixture) dial(t *testing.T) *client {
 	t.Helper()
-	conn, _, err := websocket.Dial(context.Background(), f.srv.URL, nil)
+	conn, _, err := websocket.Dial(context.Background(), f.srv.URL+"/ws", nil)
 	if err != nil {
 		t.Fatalf("dial: %v", err)
 	}

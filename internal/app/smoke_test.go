@@ -1,9 +1,12 @@
 package app_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net"
+	"net/http"
 	"path/filepath"
 	"testing"
 	"time"
@@ -125,6 +128,47 @@ func TestServerEndToEnd(t *testing.T) {
 	expect(t, ctx, conn, protocol.TypeChatHistoryReply, &history)
 	if len(history.Messages) != 1 || history.Messages[0].ID != posted.ID {
 		t.Fatalf("the message should be in the room history, got %+v", history.Messages)
+	}
+
+	// Upload a file the way a client does: ticket over the socket, bytes over
+	// HTTP, then download it back through the real routes.
+	body := []byte("smoke test attachment")
+	send(t, ctx, conn, protocol.TypeFileUploadRequest, "f1", protocol.FileUploadRequest{
+		Name: "note.txt", Size: int64(len(body)),
+	})
+	var ticket protocol.FileUploadTicket
+	expect(t, ctx, conn, protocol.TypeFileUploadTicket, &ticket)
+
+	base := "http://" + addr
+	resp, err := http.Post(base+ticket.URL, "application/octet-stream", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("upload: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("upload status %d", resp.StatusCode)
+	}
+
+	var shared protocol.Message
+	expect(t, ctx, conn, protocol.TypeChatMessage, &shared)
+	if shared.Kind != protocol.MessageFile || shared.Attachment == nil {
+		t.Fatalf("the upload should appear as a file message, got %+v", shared)
+	}
+
+	send(t, ctx, conn, protocol.TypeFileDownloadToken, "f2", protocol.FileDownloadRequest{
+		FileID: shared.Attachment.ID,
+	})
+	var link protocol.FileDownload
+	expect(t, ctx, conn, protocol.TypeFileDownload, &link)
+
+	got, err := http.Get(base + link.URL)
+	if err != nil {
+		t.Fatalf("download: %v", err)
+	}
+	defer got.Body.Close()
+	downloaded, _ := io.ReadAll(got.Body)
+	if !bytes.Equal(downloaded, body) {
+		t.Fatalf("downloaded %q, want %q", downloaded, body)
 	}
 }
 

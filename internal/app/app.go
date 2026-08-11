@@ -14,6 +14,7 @@ import (
 	"tamizchat/internal/access"
 	"tamizchat/internal/chat"
 	"tamizchat/internal/config"
+	"tamizchat/internal/files"
 	"tamizchat/internal/gateway"
 	"tamizchat/internal/httpapi"
 	"tamizchat/internal/logging"
@@ -69,8 +70,12 @@ func Run(ctx context.Context, opts Options) error {
 		return err
 	}
 	chatMgr := chat.NewManager(cfg, roomMgr, accessMgr, accessMgr)
+	fileMgr, err := files.New(cfg, roomMgr, sessions, accessMgr)
+	if err != nil {
+		return err
+	}
 
-	gw := gateway.New(cfg, sessions, roomMgr, chatMgr, accessMgr, store, serverUUID)
+	gw := gateway.New(cfg, sessions, roomMgr, chatMgr, fileMgr, accessMgr, store, serverUUID)
 
 	handler := httpapi.Handler(httpapi.Deps{
 		Config:      cfg,
@@ -78,6 +83,11 @@ func Run(ctx context.Context, opts Options) error {
 		StartedAt:   time.Now(),
 		OnlineUsers: sessions.Count,
 		Gateway:     gw,
+		Files:       fileMgr,
+		MaxUploadBytes: func() int64 {
+			return int64(cfg.Int(config.KeyUploadsMaxSizeMB)) << 20
+		},
+		OnUpload: gw.AnnounceUpload,
 	})
 
 	addr := cfg.String(config.KeyListenAddr)

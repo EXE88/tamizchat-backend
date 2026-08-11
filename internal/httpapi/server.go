@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"tamizchat/internal/config"
+	"tamizchat/internal/files"
+	"tamizchat/internal/session"
 	"tamizchat/internal/version"
 )
 
@@ -21,6 +23,12 @@ type Deps struct {
 	OnlineUsers func() int
 	// Gateway handles the WebSocket upgrade at /ws.
 	Gateway http.Handler
+	// Files serves uploads and downloads. Nil disables both endpoints.
+	Files Files
+	// MaxUploadBytes is the current per-file ceiling.
+	MaxUploadBytes func() int64
+	// OnUpload announces a finished upload in the uploader's room.
+	OnUpload func(uploader *session.Session, file files.File)
 }
 
 // Handler builds the router.
@@ -54,6 +62,11 @@ func Handler(d Deps) http.Handler {
 
 	if d.Gateway != nil {
 		mux.Handle("/ws", d.Gateway)
+	}
+
+	if d.Files != nil {
+		mux.HandleFunc("POST /api/v1/upload", d.handleUpload)
+		mux.HandleFunc("GET /api/v1/file/{id}", d.handleDownload)
 	}
 
 	return logRequests(mux)

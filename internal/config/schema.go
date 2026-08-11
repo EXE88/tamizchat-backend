@@ -148,6 +148,16 @@ var registry = buildRegistry(
 		Title: "مسیر فایل‌های موقت", Help: "محل نگهداری موقت فایل‌ها تا زمان پاک‌سازی روم.",
 		Validate: notEmpty,
 	},
+	Setting{
+		Key: KeyUploadsTokenTTLSec, Section: "uploads", Kind: KindInt, Default: "300",
+		Title: "عمر لینک دانلود (ثانیه)", Help: "لینک دانلود بعد از این مدت باطل می‌شود.",
+		Validate: intRange(10, 86400),
+	},
+	Setting{
+		Key: KeyUploadsThumbMaxPx, Section: "uploads", Kind: KindInt, Default: "320",
+		Title: "اندازهٔ تصویر بندانگشتی", Help: "بزرگ‌ترین ضلع تصویر کوچک‌شده، به پیکسل.",
+		Validate: intRange(32, 2048),
+	},
 
 	Setting{
 		Key: KeyLiveKitEnabled, Section: "livekit", Kind: KindBool, Default: "false",
@@ -202,6 +212,8 @@ const (
 	KeyUploadsMaxSizeMB   = "uploads.max_size_mb"
 	KeyUploadsRoomQuotaMB = "uploads.room_quota_mb"
 	KeyUploadsDir         = "uploads.dir"
+	KeyUploadsTokenTTLSec = "uploads.token_ttl_sec"
+	KeyUploadsThumbMaxPx  = "uploads.thumb_max_px"
 
 	KeyLiveKitEnabled   = "livekit.enabled"
 	KeyLiveKitURL       = "livekit.url"

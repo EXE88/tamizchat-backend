@@ -53,6 +53,9 @@ const (
 	TypeAdminRoleDelete = "admin.role.delete"
 	TypeAdminRoleGrant  = "admin.role.grant"
 	TypeAdminRoleRevoke = "admin.role.revoke"
+
+	TypeFileUploadRequest = "file.upload_request"
+	TypeFileDownloadToken = "file.download_token"
 )
 
 // Frame types sent by the server.
@@ -91,6 +94,9 @@ const (
 	TypeAdminRole         = "admin.role" // one role, after create or update
 	TypeAdminRoleGone     = "admin.role.deleted"
 	TypeAdminOK           = "admin.ok" // an action succeeded and needs no payload
+
+	TypeFileUploadTicket = "file.upload_ticket"
+	TypeFileDownload     = "file.download"
 )
 
 // Error codes. The client shows its own localized text per code, so these
@@ -130,6 +136,12 @@ const (
 	ErrRoleProtected = "role_protected"
 	ErrRoleRequired  = "room_role_required"
 	ErrInvalidInput  = "invalid_input"
+
+	ErrUploadsDisabled = "uploads_disabled"
+	ErrFileTooLarge    = "file_too_large"
+	ErrRoomQuotaFull   = "room_quota_exceeded"
+	ErrFileNotFound    = "file_not_found"
+	ErrFileInvalid     = "file_invalid"
 )
 
 // Reasons a session ends, reported in user.left and in the close frame.
@@ -331,7 +343,61 @@ type Moderation struct {
 const (
 	MessageText    = "text"
 	MessageSticker = "sticker"
+	MessageFile    = "file"
 )
+
+// Attachment kinds.
+const (
+	AttachmentImage = "image"
+	AttachmentFile  = "file"
+)
+
+// Attachment is a file shared in a room. Like everything else inside a room it
+// is temporary: the bytes are deleted when the room empties, and the id stops
+// resolving.
+type Attachment struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Size int64  `json:"size"`
+	// MIME is what the server detected from the bytes, not what the client
+	// claimed.
+	MIME string `json:"mime"`
+	Kind string `json:"kind"` // "image" or "file"
+	// Width, Height and HasThumb are set for images only.
+	Width    int  `json:"width,omitempty"`
+	Height   int  `json:"height,omitempty"`
+	HasThumb bool `json:"has_thumb,omitempty"`
+}
+
+// FileUploadRequest asks permission to upload, before sending any bytes. The
+// server checks the size, the quota and the permission first, so a client is
+// never left having pushed megabytes only to be refused.
+type FileUploadRequest struct {
+	Name string `json:"name"`
+	Size int64  `json:"size"`
+}
+
+// FileUploadTicket is the permission to upload exactly one file.
+type FileUploadTicket struct {
+	UploadID  string `json:"upload_id"`
+	URL       string `json:"url"`   // path to POST the bytes to
+	Token     string `json:"token"` // also accepted as a bearer token
+	ExpiresAt int64  `json:"expires_at"`
+	MaxSize   int64  `json:"max_size"`
+}
+
+// FileDownloadRequest asks for a link to a file already shared in the room.
+type FileDownloadRequest struct {
+	FileID string `json:"file_id"`
+}
+
+// FileDownload is a short-lived link. ThumbURL is empty for non-images.
+type FileDownload struct {
+	FileID    string `json:"file_id"`
+	URL       string `json:"url"`
+	ThumbURL  string `json:"thumb_url,omitempty"`
+	ExpiresAt int64  `json:"expires_at"`
+}
 
 // Message is one chat message. Messages live only in the room's memory: they
 // are gone once the room empties, so there is no permanent id to refer to
@@ -344,8 +410,10 @@ type Message struct {
 	Kind      string `json:"kind"`
 	Text      string `json:"text,omitempty"`
 	StickerID string `json:"sticker_id,omitempty"`
-	CreatedAt int64  `json:"created_at"`
-	EditedAt  int64  `json:"edited_at,omitempty"`
+	// Attachment is set on messages of kind "file".
+	Attachment *Attachment `json:"attachment,omitempty"`
+	CreatedAt  int64       `json:"created_at"`
+	EditedAt   int64       `json:"edited_at,omitempty"`
 }
 
 // ChatSend posts a message to the room the sender is currently in. Exactly one
