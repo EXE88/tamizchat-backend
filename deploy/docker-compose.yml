@@ -1,22 +1,22 @@
-# TamizChat — LiveKit و سرویس‌های جانبی
+# TamizChat - LiveKit and its supporting services
 #
-# TamizChat خودش اینجا نیست: آن یک باینری است که مستقیم اجرا می‌کنید.
-# این فایل فقط چیزهایی را بالا می‌آورد که TamizChat به آن‌ها تکیه می‌کند.
+# TamizChat itself is not here: that is a binary you run directly. This file
+# only brings up the things TamizChat leans on.
 #
-# دو پروفایل دارد:
-#   docker compose up -d                     ← فقط LiveKit (ویس و ویدیو)
-#   docker compose --profile bots up -d      ← به‌علاوهٔ Redis و Ingress (بات موسیقی)
+# It has two profiles:
+#   docker compose up -d                     <- LiveKit only (voice and video)
+#   docker compose --profile bots up -d      <- plus Redis and Ingress (music bot)
 #
-# قبل از اجرا فایل .env را از روی .env.example بسازید.
+# Create a .env file from .env.example before running it.
 
 services:
   livekit:
     image: livekit/livekit-server:latest
     container_name: tamizchat-livekit
     restart: unless-stopped
-    # host network لازم است: LiveKit باید آدرس واقعی خودش را در ICE
-    # اعلام کند و رنج پورت UDP را مستقیم بگیرد. با bridge، ترجمهٔ آدرس
-    # داکر وسط می‌افتد و اتصال مدیا برقرار نمی‌شود.
+    # host network is required: LiveKit has to announce its real address in ICE
+    # and take the UDP port range directly. With bridge, Docker's address
+    # translation gets in the way and the media connection never establishes.
     network_mode: host
     command: --config /etc/livekit.yaml
     volumes:
@@ -30,8 +30,8 @@ services:
     network_mode: host
     command: redis-server --bind 127.0.0.1 --port 6379 --save "" --appendonly no
 
-  # Ingress فقط برای بات موسیقی لازم است. فایل صوتی را از TamizChat
-  # می‌گیرد، تبدیل می‌کند و به‌عنوان یک شرکت‌کننده در روم پخش می‌کند.
+  # Ingress is only needed for the music bot. It fetches the audio file from
+  # TamizChat, transcodes it, and publishes it into the room as a participant.
   ingress:
     image: livekit/ingress:latest
     container_name: tamizchat-ingress

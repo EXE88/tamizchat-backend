@@ -69,7 +69,7 @@ func (g *Gateway) readPump(ctx context.Context, conn *websocket.Conn, sess *sess
 			return
 		}
 		if typ != websocket.MessageText {
-			sess.SendError("", protocol.ErrBadRequest, "فقط پیام متنی JSON پذیرفته می‌شود")
+			sess.SendError("", protocol.ErrBadRequest, "only JSON text messages are accepted")
 			continue
 		}
 		if sess.Closed() {
@@ -89,13 +89,13 @@ func (g *Gateway) dispatch(ctx context.Context, sess *session.Session, data []by
 		if r := recover(); r != nil {
 			slog.Error("recovered from a panic while handling a frame",
 				"client_uuid", sess.ClientUUID, "panic", r, "stack", string(debug.Stack()))
-			sess.SendError("", protocol.ErrInternal, "خطای داخلی سرور")
+			sess.SendError("", protocol.ErrInternal, "internal server error")
 		}
 	}()
 
 	var env protocol.Envelope
 	if err := json.Unmarshal(data, &env); err != nil {
-		sess.SendError("", protocol.ErrBadRequest, "قالب پیام معتبر نیست")
+		sess.SendError("", protocol.ErrBadRequest, "the message format is not valid")
 		return
 	}
 
@@ -188,17 +188,17 @@ func (g *Gateway) dispatch(ctx context.Context, sess *session.Session, data []by
 		g.handleBotMove(ctx, sess, env)
 
 	case protocol.TypeHello:
-		sess.SendError(env.ID, protocol.ErrBadRequest, "hello فقط یک‌بار در ابتدای اتصال پذیرفته می‌شود")
+		sess.SendError(env.ID, protocol.ErrBadRequest, "hello is accepted only once, at the start of the connection")
 
 	default:
-		sess.SendError(env.ID, protocol.ErrBadRequest, "نوع پیام پشتیبانی نمی‌شود: "+env.Type)
+		sess.SendError(env.ID, protocol.ErrBadRequest, "unsupported message type: "+env.Type)
 	}
 }
 
 func (g *Gateway) handleRename(ctx context.Context, sess *session.Session, env protocol.Envelope) {
 	var req protocol.Rename
 	if err := json.Unmarshal(env.Data, &req); err != nil {
-		sess.SendError(env.ID, protocol.ErrBadRequest, "محتوای پیام معتبر نیست")
+		sess.SendError(env.ID, protocol.ErrBadRequest, "the message payload is not valid")
 		return
 	}
 
@@ -213,7 +213,7 @@ func (g *Gateway) handleRename(ctx context.Context, sess *session.Session, env p
 		return
 	}
 	if g.sessions.UsernameTaken(name, sess.ClientUUID) {
-		sess.SendError(env.ID, protocol.ErrUsernameTaken, "این نام کاربری استفاده شده است")
+		sess.SendError(env.ID, protocol.ErrUsernameTaken, "that username is already taken")
 		return
 	}
 

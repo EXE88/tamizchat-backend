@@ -116,10 +116,10 @@ func TestServerEndToEnd(t *testing.T) {
 	send(t, ctx, conn, protocol.TypeRoomJoin, "j1", protocol.RoomJoin{RoomID: roomID})
 	expect(t, ctx, conn, protocol.TypeRoomJoined, nil)
 
-	send(t, ctx, conn, protocol.TypeChatSend, "c1", protocol.ChatSend{Text: "سلام"})
+	send(t, ctx, conn, protocol.TypeChatSend, "c1", protocol.ChatSend{Text: "hello"})
 	var posted protocol.Message
 	expect(t, ctx, conn, protocol.TypeChatMessage, &posted)
-	if posted.Text != "سلام" || posted.RoomID != roomID {
+	if posted.Text != "hello" || posted.RoomID != roomID {
 		t.Fatalf("unexpected message: %+v", posted)
 	}
 

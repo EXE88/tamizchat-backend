@@ -11,27 +11,27 @@ import (
 
 // NormalizeName trims a display name, collapses internal whitespace and
 // rejects anything that could be used to impersonate another name or break a
-// client's layout. label is used in the error messages ("نام کاربری"، "نام روم").
+// client's layout. label is used in the error messages ("username", "room name").
 func NormalizeName(raw, label string, min, max int) (string, error) {
 	name := strings.TrimSpace(raw)
 	if name == "" {
-		return "", fmt.Errorf("%s نمی‌تواند خالی باشد", label)
+		return "", fmt.Errorf("%s cannot be empty", label)
 	}
 
 	runes := []rune(name)
 	if len(runes) < min {
-		return "", fmt.Errorf("%s باید حداقل %d کاراکتر باشد", label, min)
+		return "", fmt.Errorf("%s must be at least %d characters", label, min)
 	}
 	if len(runes) > max {
-		return "", fmt.Errorf("%s باید حداکثر %d کاراکتر باشد", label, max)
+		return "", fmt.Errorf("%s must be at most %d characters", label, max)
 	}
 
 	for _, r := range runes {
 		switch {
 		case unicode.IsControl(r):
-			return "", fmt.Errorf("%s نباید کاراکتر کنترلی داشته باشد", label)
+			return "", fmt.Errorf("%s must not contain control characters", label)
 		case IsBidiControl(r):
-			return "", fmt.Errorf("%s نباید کاراکتر جهت‌دهی متن داشته باشد", label)
+			return "", fmt.Errorf("%s must not contain bidirectional text characters", label)
 		}
 	}
 
@@ -51,10 +51,10 @@ func NormalizeMessage(raw string, max int) (string, error) {
 	text = strings.Trim(text, " \t\n")
 
 	if text == "" {
-		return "", fmt.Errorf("پیام نمی‌تواند خالی باشد")
+		return "", fmt.Errorf("message cannot be empty")
 	}
 	if n := len([]rune(text)); n > max {
-		return "", fmt.Errorf("پیام باید حداکثر %d کاراکتر باشد (الان %d)", max, n)
+		return "", fmt.Errorf("message must be at most %d characters (currently %d)", max, n)
 	}
 
 	for _, r := range text {
@@ -62,7 +62,7 @@ func NormalizeMessage(raw string, max int) (string, error) {
 			continue
 		}
 		if unicode.IsControl(r) {
-			return "", fmt.Errorf("پیام نباید کاراکتر کنترلی داشته باشد")
+			return "", fmt.Errorf("message must not contain control characters")
 		}
 	}
 	return text, nil

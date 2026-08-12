@@ -29,8 +29,8 @@ type Setting struct {
 	Kind     Kind
 	Default  string
 	Options  []string // for KindEnum
-	Title    string   // Persian label shown in the panel
-	Help     string   // Persian one-line explanation
+	Title    string   // label shown in the panel
+	Help     string   // one-line explanation
 	Validate func(string) error
 }
 
@@ -41,212 +41,212 @@ var Sections = []string{"server", "network", "tls", "users", "rooms", "chat",
 var registry = buildRegistry(
 	Setting{
 		Key: KeyServerName, Section: "server", Kind: KindString, Default: "TamizChat Server",
-		Title: "نام سرور", Help: "نامی که کلاینت‌ها هنگام اتصال می‌بینند.",
+		Title: "Server name", Help: "The name clients see when they connect.",
 		Validate: notEmpty,
 	},
 	Setting{
-		Key: KeyServerWelcome, Section: "server", Kind: KindString, Default: "به سرور خوش آمدید!",
-		Title: "پیام خوش‌آمد", Help: "پس از اتصال موفق برای کاربر ارسال می‌شود.",
+		Key: KeyServerWelcome, Section: "server", Kind: KindString, Default: "Welcome to the server!",
+		Title: "Welcome message", Help: "Sent to the user after a successful connection.",
 	},
 	Setting{
 		Key: KeyServerPassword, Section: "server", Kind: KindSecret, Default: "",
-		Title: "رمز ورود سرور", Help: "خالی یعنی سرور باز است و هرکسی می‌تواند وصل شود.",
+		Title: "Server password", Help: "Empty means the server is open and anyone may connect.",
 	},
 	Setting{
 		Key: KeyServerMaxUsers, Section: "server", Kind: KindInt, Default: "200",
-		Title: "حداکثر کاربر همزمان", Help: "سقف تعداد نشست‌های فعال روی کل سرور.",
+		Title: "Max concurrent users", Help: "Cap on active sessions across the whole server.",
 		Validate: intRange(1, 100000),
 	},
 
 	Setting{
 		Key: KeyListenAddr, Section: "network", Kind: KindString, Default: ":8080",
-		Title: "آدرس گوش‌دادن", Help: "مثلاً :8080 یا 127.0.0.1:8080 — پس از تغییر نیاز به ری‌استارت دارد.",
+		Title: "Listen address", Help: "e.g. :8080 or 127.0.0.1:8080 — needs a restart to take effect.",
 		Validate: validListenAddr,
 	},
 	Setting{
 		Key: KeyPublicHost, Section: "network", Kind: KindString, Default: "",
-		Title: "هاست عمومی", Help: "دامنه یا آی‌پی که کلاینت‌ها با آن وصل می‌شوند؛ برای ساخت لینک‌ها استفاده می‌شود.",
+		Title: "Public host", Help: "The domain or IP clients connect to; used to build links.",
 	},
 
 	Setting{
 		Key: KeyHeartbeatSec, Section: "network", Kind: KindInt, Default: "30",
-		Title: "فاصلهٔ ضربان (ثانیه)", Help: "هر چند ثانیه سرور کلاینت را ping کند تا اتصال‌های مرده تشخیص داده شوند.",
+		Title: "Heartbeat interval (seconds)", Help: "How often the server pings a client so dead connections are noticed.",
 		Validate: intRange(5, 600),
 	},
 
 	Setting{
 		Key: KeyMaxConnsPerIP, Section: "network", Kind: KindInt, Default: "8",
-		Title: "حداکثر اتصال هر آی‌پی", Help: "صفر یعنی بدون محدودیت — برای وقتی همه پشت یک NAT هستند.",
+		Title: "Max connections per IP", Help: "Zero means unlimited — for when everyone is behind one NAT.",
 		Validate: intRange(0, 10000),
 	},
 	Setting{
 		Key: KeyHandshakePerMinute, Section: "network", Kind: KindInt, Default: "60",
-		Title: "سقف اتصال جدید در دقیقه", Help: "برای هر آی‌پی؛ جلوی سیل اتصال را می‌گیرد.",
+		Title: "New connections per minute", Help: "Per IP; stops connection floods.",
 		Validate: intRange(1, 10000),
 	},
 	Setting{
 		Key: KeyHandshakeBurst, Section: "network", Kind: KindInt, Default: "15",
-		Title: "اتصال پشت‌سرهم مجاز", Help: "کلاینتی که چند روم را سریع عوض می‌کند نباید بلوکه شود.",
+		Title: "Connection burst allowance", Help: "A client hopping quickly between rooms must not get blocked.",
 		Validate: intRange(1, 1000),
 	},
 	Setting{
 		Key: KeyTrustedProxies, Section: "network", Kind: KindString, Default: "",
-		Title:    "پروکسی‌های مورد اعتماد",
-		Help:     "فهرست آی‌پی یا CIDR با کاما. فقط از این آدرس‌ها هدر X-Forwarded-For باور می‌شود.",
+		Title:    "Trusted proxies",
+		Help:     "Comma-separated IPs or CIDRs. X-Forwarded-For is believed only from these addresses.",
 		Validate: validTrustedProxies,
 	},
 
 	Setting{
 		Key: KeyTLSEnabled, Section: "tls", Kind: KindBool, Default: "false",
-		Title: "فعال بودن TLS", Help: "اگر پشت nginx یا Caddy هستید، خاموش بگذارید و TLS را آن‌ها انجام دهند.",
+		Title: "TLS enabled", Help: "Behind nginx or Caddy, leave this off and let them terminate TLS.",
 	},
 	Setting{
 		Key: KeyTLSCertFile, Section: "tls", Kind: KindString, Default: "",
-		Title: "فایل گواهی (fullchain)", Help: "مسیر فایل PEM شامل گواهی و زنجیرهٔ آن.",
+		Title: "Certificate file (fullchain)", Help: "Path to the PEM file holding the certificate and its chain.",
 	},
 	Setting{
 		Key: KeyTLSKeyFile, Section: "tls", Kind: KindString, Default: "",
-		Title: "فایل کلید خصوصی", Help: "مسیر فایل PEM کلید خصوصی.",
+		Title: "Private key file", Help: "Path to the private key PEM file.",
 	},
 
 	Setting{
 		Key: KeyBackupDir, Section: "backup", Kind: KindString, Default: "data/backups",
-		Title: "مسیر بکاپ‌ها", Help: "بکاپ دیتابیس از پنل در این پوشه ساخته می‌شود.",
+		Title: "Backup folder", Help: "Database backups taken from the panel are written here.",
 		Validate: notEmpty,
 	},
 	Setting{
 		Key: KeyBackupKeep, Section: "backup", Kind: KindInt, Default: "10",
-		Title: "تعداد بکاپ نگه‌داشته‌شده", Help: "قدیمی‌ترها پس از هر بکاپ تازه حذف می‌شوند.",
+		Title: "Backups to keep", Help: "Older ones are removed after each new backup.",
 		Validate: intRange(1, 1000),
 	},
 
 	Setting{
 		Key: KeyUsernameMinLen, Section: "users", Kind: KindInt, Default: "3",
-		Title: "حداقل طول نام کاربری", Help: "تعداد کاراکتر.",
+		Title: "Minimum username length", Help: "In characters.",
 		Validate: intRange(1, 64),
 	},
 	Setting{
 		Key: KeyUsernameMaxLen, Section: "users", Kind: KindInt, Default: "24",
-		Title: "حداکثر طول نام کاربری", Help: "تعداد کاراکتر؛ باید از حداقل بزرگ‌تر باشد.",
+		Title: "Maximum username length", Help: "In characters; must be greater than the minimum.",
 		Validate: intRange(1, 64),
 	},
 
 	Setting{
 		Key: KeyRoomsMaxPerServer, Section: "rooms", Kind: KindInt, Default: "50",
-		Title: "حداکثر تعداد روم", Help: "سقف روم‌هایی که روی این سرور ساخته می‌شود.",
+		Title: "Maximum number of rooms", Help: "Cap on rooms that can exist on this server.",
 		Validate: intRange(1, 10000),
 	},
 	Setting{
 		Key: KeyRoomsDefaultMaxUsers, Section: "rooms", Kind: KindInt, Default: "25",
-		Title: "ظرفیت پیش‌فرض روم", Help: "مقدار اولیهٔ ظرفیت هنگام ساخت روم جدید.",
+		Title: "Default room capacity", Help: "Starting capacity when a new room is created.",
 		Validate: intRange(1, 5000),
 	},
 	Setting{
 		Key: KeyRoomsHistoryLimit, Section: "rooms", Kind: KindInt, Default: "500",
-		Title: "سقف پیام در حافظهٔ روم", Help: "پیام‌های قدیمی‌تر از این تعداد از حافظهٔ موقت روم حذف می‌شوند.",
+		Title: "Messages kept in room memory", Help: "Messages beyond this count are dropped from the room's temporary buffer.",
 		Validate: intRange(10, 100000),
 	},
 	Setting{
 		Key: KeyRoomsPurgeOnEmpty, Section: "rooms", Kind: KindBool, Default: "true",
-		Title: "پاک‌سازی روم پس از خالی‌شدن", Help: "با خروج آخرین نفر، چت و فایل‌های روم پاک می‌شوند.",
+		Title: "Purge a room once it empties", Help: "When the last member leaves, the room's chat and files are erased.",
 	},
 	Setting{
 		Key: KeyRoomsPurgeGraceSec, Section: "rooms", Kind: KindInt, Default: "30",
-		Title: "مهلت پاک‌سازی (ثانیه)", Help: "اگر کسی در این بازه برگردد، محتوای روم حفظ می‌شود.",
+		Title: "Purge grace period (seconds)", Help: "If somebody returns within this window, the room's content survives.",
 		Validate: intRange(0, 86400),
 	},
 
 	Setting{
 		Key: KeyChatMaxMessageLen, Section: "chat", Kind: KindInt, Default: "2000",
-		Title: "حداکثر طول پیام", Help: "تعداد کاراکتر هر پیام متنی.",
+		Title: "Maximum message length", Help: "Characters per text message.",
 		Validate: intRange(1, 20000),
 	},
 	Setting{
 		Key: KeyChatRatePerMinute, Section: "chat", Kind: KindInt, Default: "30",
-		Title: "سقف پیام در دقیقه", Help: "نرخ پایدار ارسال پیام برای هر کاربر.",
+		Title: "Messages per minute", Help: "Sustained send rate per user.",
 		Validate: intRange(1, 600),
 	},
 	Setting{
 		Key: KeyChatRateBurst, Section: "chat", Kind: KindInt, Default: "5",
-		Title: "پیام پشت‌سرهم مجاز", Help: "چند پیام بی‌وقفه بعد از یک مکث پذیرفته می‌شود.",
+		Title: "Message burst allowance", Help: "How many back-to-back messages are accepted after a pause.",
 		Validate: intRange(1, 100),
 	},
 	Setting{
 		Key: KeyChatStickersEnabled, Section: "chat", Kind: KindBool, Default: "true",
-		Title: "فعال بودن استیکر", Help: "اجازهٔ ارسال استیکر در روم‌ها.",
+		Title: "Stickers enabled", Help: "Allow stickers to be sent in rooms.",
 	},
 
 	Setting{
 		Key: KeyUploadsEnabled, Section: "uploads", Kind: KindBool, Default: "true",
-		Title: "فعال بودن ارسال فایل", Help: "اجازهٔ ارسال فایل و عکس در روم‌ها.",
+		Title: "File uploads enabled", Help: "Allow files and images to be sent in rooms.",
 	},
 	Setting{
 		Key: KeyUploadsMaxSizeMB, Section: "uploads", Kind: KindInt, Default: "25",
-		Title: "حداکثر حجم هر فایل (مگابایت)", Help: "فایل‌های بزرگ‌تر رد می‌شوند.",
+		Title: "Maximum file size (MB)", Help: "Larger files are rejected.",
 		Validate: intRange(1, 2048),
 	},
 	Setting{
 		Key: KeyUploadsRoomQuotaMB, Section: "uploads", Kind: KindInt, Default: "512",
-		Title: "سهمیهٔ فایل هر روم (مگابایت)", Help: "مجموع حجم فایل‌های زندهٔ یک روم.",
+		Title: "Per-room file quota (MB)", Help: "Total size of a room's live files.",
 		Validate: intRange(1, 102400),
 	},
 	Setting{
 		Key: KeyUploadsDir, Section: "uploads", Kind: KindString, Default: "data/uploads",
-		Title: "مسیر فایل‌های موقت", Help: "محل نگهداری موقت فایل‌ها تا زمان پاک‌سازی روم.",
+		Title: "Temporary file folder", Help: "Where files are held until the room is purged.",
 		Validate: notEmpty,
 	},
 	Setting{
 		Key: KeyUploadsTokenTTLSec, Section: "uploads", Kind: KindInt, Default: "300",
-		Title: "عمر لینک دانلود (ثانیه)", Help: "لینک دانلود بعد از این مدت باطل می‌شود.",
+		Title: "Download link lifetime (seconds)", Help: "A download link expires after this long.",
 		Validate: intRange(10, 86400),
 	},
 	Setting{
 		Key: KeyUploadsThumbMaxPx, Section: "uploads", Kind: KindInt, Default: "320",
-		Title: "اندازهٔ تصویر بندانگشتی", Help: "بزرگ‌ترین ضلع تصویر کوچک‌شده، به پیکسل.",
+		Title: "Thumbnail size", Help: "Longest side of the scaled-down image, in pixels.",
 		Validate: intRange(32, 2048),
 	},
 
 	Setting{
 		Key: KeyPaintEnabled, Section: "paint", Kind: KindBool, Default: "true",
-		Title: "فعال بودن تختهٔ نقاشی", Help: "اجازهٔ نقاشی مشترک در روم‌ها.",
+		Title: "Paint board enabled", Help: "Allow shared drawing in rooms.",
 	},
 	Setting{
 		Key: KeyPaintMaxStrokes, Section: "paint", Kind: KindInt, Default: "2000",
-		Title: "حداکثر تعداد خط در تخته", Help: "پس از پر شدن، تخته باید پاک شود تا بشود ادامه داد.",
+		Title: "Maximum strokes per board", Help: "Once full, the board must be cleared before drawing continues.",
 		Validate: intRange(10, 100000),
 	},
 	Setting{
 		Key: KeyPaintRatePerSecond, Section: "paint", Kind: KindInt, Default: "40",
-		Title: "سقف پیام نقاشی در ثانیه", Help: "نرخ پایدار ارسال نقطه‌های نقاشی برای هر کاربر.",
+		Title: "Paint messages per second", Help: "Sustained rate of drawing points per user.",
 		Validate: intRange(1, 500),
 	},
 	Setting{
 		Key: KeyPaintRateBurst, Section: "paint", Kind: KindInt, Default: "80",
-		Title: "پیام نقاشی پشت‌سرهم مجاز", Help: "برای اینکه شروع یک خط سریع، بریده‌بریده نشود.",
+		Title: "Paint burst allowance", Help: "So the start of a fast stroke does not come out choppy.",
 		Validate: intRange(1, 1000),
 	},
 
 	Setting{
 		Key: KeyLiveKitEnabled, Section: "livekit", Kind: KindBool, Default: "false",
-		Title: "فعال بودن ویس/ویدیو", Help: "تا وقتی LiveKit تنظیم نشده، خاموش بماند.",
+		Title: "Voice/video enabled", Help: "Leave off until LiveKit is configured.",
 	},
 	Setting{
 		Key: KeyLiveKitURL, Section: "livekit", Kind: KindString, Default: "",
-		Title: "آدرس LiveKit", Help: "مثلاً ws://127.0.0.1:7880 — کلاینت با این آدرس به مدیا وصل می‌شود.",
+		Title: "LiveKit URL", Help: "e.g. ws://127.0.0.1:7880 — the address clients use for media.",
 	},
 	Setting{
 		Key: KeyLiveKitAPIKey, Section: "livekit", Kind: KindString, Default: "",
-		Title: "LiveKit API Key", Help: "کلید صادرشده در کانفیگ LiveKit.",
+		Title: "LiveKit API Key", Help: "The key issued in the LiveKit config.",
 	},
 	Setting{
 		Key: KeyLiveKitAPISecret, Section: "livekit", Kind: KindSecret, Default: "",
-		Title: "LiveKit API Secret", Help: "با این مقدار توکن اتصال کاربران امضا می‌شود.",
+		Title: "LiveKit API Secret", Help: "Used to sign the tokens clients connect with.",
 	},
 
 	Setting{
 		Key: KeyLogLevel, Section: "log", Kind: KindEnum, Default: "info",
 		Options: []string{"debug", "info", "warn", "error"},
-		Title:   "سطح لاگ", Help: "بدون ری‌استارت اعمال می‌شود.",
+		Title:   "Log level", Help: "Applied without a restart.",
 	},
 )
 
@@ -338,11 +338,11 @@ func (s Setting) check(value string) error {
 	switch s.Kind {
 	case KindInt:
 		if _, err := strconv.Atoi(strings.TrimSpace(value)); err != nil {
-			return fmt.Errorf("%s: مقدار باید عدد باشد", s.Key)
+			return fmt.Errorf("%s: value must be a number", s.Key)
 		}
 	case KindBool:
 		if _, err := parseBool(value); err != nil {
-			return fmt.Errorf("%s: مقدار باید true یا false باشد", s.Key)
+			return fmt.Errorf("%s: value must be true or false", s.Key)
 		}
 	case KindEnum:
 		ok := false
@@ -353,7 +353,7 @@ func (s Setting) check(value string) error {
 			}
 		}
 		if !ok {
-			return fmt.Errorf("%s: مقدار مجاز یکی از %s است", s.Key, strings.Join(s.Options, ", "))
+			return fmt.Errorf("%s: value must be one of %s", s.Key, strings.Join(s.Options, ", "))
 		}
 	}
 	if s.Validate != nil {
@@ -374,7 +374,7 @@ func parseBool(v string) (bool, error) {
 
 func notEmpty(v string) error {
 	if strings.TrimSpace(v) == "" {
-		return fmt.Errorf("مقدار نمی‌تواند خالی باشد")
+		return fmt.Errorf("value cannot be empty")
 	}
 	return nil
 }
@@ -383,10 +383,10 @@ func intRange(min, max int) func(string) error {
 	return func(v string) error {
 		n, err := strconv.Atoi(strings.TrimSpace(v))
 		if err != nil {
-			return fmt.Errorf("مقدار باید عدد باشد")
+			return fmt.Errorf("value must be a number")
 		}
 		if n < min || n > max {
-			return fmt.Errorf("مقدار باید بین %d و %d باشد", min, max)
+			return fmt.Errorf("value must be between %d and %d", min, max)
 		}
 		return nil
 	}
@@ -405,7 +405,7 @@ func validTrustedProxies(v string) error {
 			continue
 		}
 		if net.ParseIP(entry) == nil {
-			return fmt.Errorf("«%s» نه آی‌پی است نه CIDR", entry)
+			return fmt.Errorf("%q is neither an IP nor a CIDR", entry)
 		}
 	}
 	return nil
@@ -413,10 +413,10 @@ func validTrustedProxies(v string) error {
 
 func validListenAddr(v string) error {
 	if strings.TrimSpace(v) == "" {
-		return fmt.Errorf("آدرس نمی‌تواند خالی باشد")
+		return fmt.Errorf("address cannot be empty")
 	}
 	if _, _, err := net.SplitHostPort(v); err != nil {
-		return fmt.Errorf("قالب درست مثل :8080 یا 127.0.0.1:8080 است")
+		return fmt.Errorf("the format should look like :8080 or 127.0.0.1:8080")
 	}
 	return nil
 }

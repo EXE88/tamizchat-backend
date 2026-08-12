@@ -29,7 +29,7 @@ func (d Deps) handleUpload(w http.ResponseWriter, r *http.Request) {
 	token := bearerToken(r)
 	if token == "" {
 		writeJSON(w, http.StatusUnauthorized,
-			errorBody(protocol.ErrBadRequest, "توکن آپلود لازم است"))
+			errorBody(protocol.ErrBadRequest, "an upload token is required"))
 		return
 	}
 
@@ -66,7 +66,7 @@ func (d Deps) handleDownload(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, files.ErrBadToken) {
 			status, code = http.StatusForbidden, protocol.ErrForbidden
 		}
-		writeJSON(w, status, errorBody(code, "این فایل در دسترس نیست"))
+		writeJSON(w, status, errorBody(code, "that file is not available"))
 		return
 	}
 	defer body.Close()
@@ -110,18 +110,18 @@ func bearerToken(r *http.Request) string {
 func uploadError(err error) (int, string, string) {
 	switch {
 	case errors.Is(err, files.ErrBadTicket):
-		return http.StatusForbidden, protocol.ErrForbidden, "توکن آپلود معتبر نیست یا منقضی شده"
+		return http.StatusForbidden, protocol.ErrForbidden, "the upload token is invalid or expired"
 	case errors.Is(err, files.ErrNotInRoom):
-		return http.StatusConflict, protocol.ErrNotInRoom, "دیگر در آن روم نیستید"
+		return http.StatusConflict, protocol.ErrNotInRoom, "you are no longer in that room"
 	case errors.Is(err, files.ErrTooLarge):
-		return http.StatusRequestEntityTooLarge, protocol.ErrFileTooLarge, "فایل بزرگ‌تر از حد مجاز است"
+		return http.StatusRequestEntityTooLarge, protocol.ErrFileTooLarge, "the file is larger than allowed"
 	case errors.Is(err, files.ErrQuotaFull):
-		return http.StatusInsufficientStorage, protocol.ErrRoomQuotaFull, "سهمیهٔ فایل این روم پر است"
+		return http.StatusInsufficientStorage, protocol.ErrRoomQuotaFull, "this room's file quota is full"
 	case errors.Is(err, files.ErrEmptyUpload):
-		return http.StatusBadRequest, protocol.ErrFileInvalid, "فایل خالی است"
+		return http.StatusBadRequest, protocol.ErrFileInvalid, "the file is empty"
 	default:
 		slog.Error("upload failed", "err", err)
-		return http.StatusInternalServerError, protocol.ErrInternal, "خطای داخلی سرور"
+		return http.StatusInternalServerError, protocol.ErrInternal, "internal server error"
 	}
 }
 

@@ -34,27 +34,27 @@ const (
 type Descriptor struct {
 	Perm  Permission
 	Key   string // stable identifier used on the wire
-	Title string // Persian label
+	Title string // human-readable label
 }
 
 // All lists every permission in the order the panel should show them.
 var All = []Descriptor{
-	{PermSendMessages, "send_messages", "ارسال پیام"},
-	{PermUploadFiles, "upload_files", "ارسال فایل و عکس"},
-	{PermModerateChat, "moderate_chat", "حذف پیام دیگران"},
-	{PermManageRooms, "manage_rooms", "ساخت، ویرایش و حذف روم"},
-	{PermJoinLockedRooms, "join_locked_rooms", "ورود به روم‌های محدودشده با رول"},
-	{PermBypassRoomPassword, "bypass_room_password", "ورود به روم بدون رمز"},
-	{PermKick, "kick", "اخراج کاربر از سرور"},
-	{PermBan, "ban", "بن کردن کاربر"},
-	{PermMute, "mute", "میوت کردن کاربر"},
-	{PermMoveUsers, "move_users", "جابه‌جایی کاربر بین روم‌ها"},
-	{PermSpeak, "speak", "صحبت کردن با میکروفون"},
-	{PermPublishVideo, "publish_video", "روشن کردن دوربین"},
-	{PermShareScreen, "share_screen", "اشتراک صفحه"},
-	{PermPaint, "paint", "نقاشی روی تخته"},
-	{PermManageRoles, "manage_roles", "مدیریت رول‌ها و انتساب آن‌ها"},
-	{PermControlBots, "control_bots", "کنترل بات‌ها"},
+	{PermSendMessages, "send_messages", "Send messages"},
+	{PermUploadFiles, "upload_files", "Send files and images"},
+	{PermModerateChat, "moderate_chat", "Delete other people's messages"},
+	{PermManageRooms, "manage_rooms", "Create, edit and delete rooms"},
+	{PermJoinLockedRooms, "join_locked_rooms", "Join role-restricted rooms"},
+	{PermBypassRoomPassword, "bypass_room_password", "Join a room without its password"},
+	{PermKick, "kick", "Kick a user from the server"},
+	{PermBan, "ban", "Ban a user"},
+	{PermMute, "mute", "Mute a user"},
+	{PermMoveUsers, "move_users", "Move users between rooms"},
+	{PermSpeak, "speak", "Talk on the microphone"},
+	{PermPublishVideo, "publish_video", "Turn on the camera"},
+	{PermShareScreen, "share_screen", "Share the screen"},
+	{PermPaint, "paint", "Draw on the paint board"},
+	{PermManageRoles, "manage_roles", "Manage roles and their assignment"},
+	{PermControlBots, "control_bots", "Control bots"},
 }
 
 // Lookup finds a permission by its wire key.

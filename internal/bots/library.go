@@ -49,19 +49,19 @@ type Track struct {
 func scanFolder(root string) ([]Track, error) {
 	root = strings.TrimSpace(root)
 	if root == "" {
-		return nil, fmt.Errorf("مسیر فولدر موسیقی خالی است")
+		return nil, fmt.Errorf("the music folder path is empty")
 	}
 
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
-		return nil, fmt.Errorf("مسیر فولدر معتبر نیست: %w", err)
+		return nil, fmt.Errorf("the folder path is not valid: %w", err)
 	}
 	info, err := os.Stat(absRoot)
 	if err != nil {
-		return nil, fmt.Errorf("فولدر موسیقی باز نشد: %w", err)
+		return nil, fmt.Errorf("could not open the music folder: %w", err)
 	}
 	if !info.IsDir() {
-		return nil, fmt.Errorf("مسیر داده‌شده فولدر نیست")
+		return nil, fmt.Errorf("the given path is not a folder")
 	}
 
 	var tracks []Track
@@ -90,7 +90,7 @@ func scanFolder(root string) ([]Track, error) {
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("پیمایش فولدر ناموفق بود: %w", err)
+		return nil, fmt.Errorf("could not walk the folder: %w", err)
 	}
 
 	sort.Slice(tracks, func(i, j int) bool {

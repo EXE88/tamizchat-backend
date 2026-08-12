@@ -102,7 +102,7 @@ func (m *Manager) seed(ctx context.Context) error {
 
 	roles := []storage.Role{{
 		ID:   storage.RoleIDDefault,
-		Name: "کاربر",
+		Name: "User",
 		Permissions: uint64(authz.PermSendMessages | authz.PermUploadFiles |
 			authz.PermSpeak | authz.PermPublishVideo | authz.PermShareScreen |
 			authz.PermPaint),
@@ -110,7 +110,7 @@ func (m *Manager) seed(ctx context.Context) error {
 		IsDefault: true,
 	}, {
 		ID:          storage.RoleIDAdmin,
-		Name:        "ادمین",
+		Name:        "Admin",
 		Permissions: uint64(authz.Everything()),
 		Priority:    100,
 		Color:       "#e74c3c",
@@ -313,7 +313,7 @@ func sortRoles(roles []storage.Role) {
 
 // normalizeRoleName validates a role name.
 func normalizeRoleName(raw string) (string, error) {
-	name, err := textutil.NormalizeName(raw, "نام رول", RoleNameMinLen, RoleNameMaxLen)
+	name, err := textutil.NormalizeName(raw, "role name", RoleNameMinLen, RoleNameMaxLen)
 	if err != nil {
 		return "", &ValidationError{Msg: err.Error()}
 	}

@@ -18,18 +18,18 @@ func (p *Panel) roomsMenu(ctx context.Context) {
 	for {
 		list, err := p.store.ListRooms(ctx)
 		if err != nil {
-			p.warn("خواندن روم‌ها ناموفق بود: " + err.Error())
+			p.warn("Could not read rooms: " + err.Error())
 			return
 		}
 
 		p.clear()
 		p.banner()
-		p.printf("  %s (%d روم)\n\n", bold("مدیریت روم‌ها"), len(list))
+		p.printf("  %s (%d)\n\n", bold("Rooms"), len(list))
 
 		if len(list) == 0 {
-			p.println("  هنوز رومی ساخته نشده است.\n")
+			p.println("  No rooms have been created yet.\n")
 		} else {
-			p.printf("  %-4s %-28s %-10s %-8s %s\n", "#", "نام", "رمز", "ظرفیت", "ساخته‌شده")
+			p.printf("  %-4s %-28s %-10s %-8s %s\n", "#", "NAME", "PASSWORD", "CAPACITY", "CREATED")
 			for i, r := range list {
 				p.printf("  %-4d %-28s %-10s %-8d %s\n", i+1, truncate(r.Name, 28),
 					hasPassword(r.Password), r.Capacity,
@@ -38,12 +38,12 @@ func (p *Panel) roomsMenu(ctx context.Context) {
 			p.println("")
 		}
 
-		p.println("  n) ساخت روم جدید")
-		p.println("  e) ویرایش روم")
-		p.println("  d) حذف روم")
-		p.println("  0) بازگشت\n")
+		p.println("  n) Create a room")
+		p.println("  e) Edit a room")
+		p.println("  d) Delete a room")
+		p.println("  0) Back\n")
 
-		switch p.ask("انتخاب کنید") {
+		switch p.ask("Choose") {
 		case "n":
 			p.createRoom(ctx)
 		case "e":
@@ -53,25 +53,25 @@ func (p *Panel) roomsMenu(ctx context.Context) {
 		case "0", "":
 			return
 		default:
-			p.warn("گزینهٔ نامعتبر")
+			p.warn("Invalid choice")
 		}
 	}
 }
 
 func (p *Panel) createRoom(ctx context.Context) {
 	p.println("")
-	name, ok := p.askRoomName("نام روم")
+	name, ok := p.askRoomName("Room name")
 	if !ok {
 		return
 	}
 
-	password := p.ask("رمز روم (خالی = بدون رمز)")
+	password := p.ask("Room password (empty = no password)")
 
 	capacity := p.cfg.Int(config.KeyRoomsDefaultMaxUsers)
-	if raw := p.ask("ظرفیت (خالی = پیش‌فرض " + strconv.Itoa(capacity) + ")"); raw != "" {
+	if raw := p.ask("Capacity (empty = default " + strconv.Itoa(capacity) + ")"); raw != "" {
 		n, err := strconv.Atoi(raw)
 		if err != nil || n < 1 {
-			p.warn("ظرفیت باید عددی بزرگ‌تر از صفر باشد")
+			p.warn("Capacity must be a number greater than zero")
 			return
 		}
 		capacity = n
@@ -79,7 +79,7 @@ func (p *Panel) createRoom(ctx context.Context) {
 
 	pos, err := p.store.NextRoomPosition(ctx)
 	if err != nil {
-		p.warn("خطا: " + err.Error())
+		p.warn("Error: " + err.Error())
 		return
 	}
 
@@ -88,86 +88,86 @@ func (p *Panel) createRoom(ctx context.Context) {
 		Capacity: capacity, Position: pos,
 	})
 	if err != nil {
-		p.warn("خطا: " + err.Error())
+		p.warn("Error: " + err.Error())
 		return
 	}
-	p.okLive("روم ساخته شد")
+	p.okLive("Room created")
 }
 
 func (p *Panel) editRoom(ctx context.Context, list []storage.Room) {
-	room, ok := p.pickRoom("شمارهٔ روم برای ویرایش", list)
+	room, ok := p.pickRoom("Number of the room to edit", list)
 	if !ok {
 		return
 	}
 
-	p.printf("\n  ویرایش «%s» — هر فیلد را خالی بگذارید تا تغییر نکند\n", room.Name)
+	p.printf("\n  Editing \"%s\" — leave a field empty to keep it unchanged\n", room.Name)
 
-	if raw := p.ask("نام جدید"); raw != "" {
-		name, err := textutil.NormalizeName(raw, "نام روم", rooms.RoomNameMinLen, rooms.RoomNameMaxLen)
+	if raw := p.ask("New name"); raw != "" {
+		name, err := textutil.NormalizeName(raw, "room name", rooms.RoomNameMinLen, rooms.RoomNameMaxLen)
 		if err != nil {
 			p.warn(err.Error())
 			return
 		}
 		room.Name = name
 	}
-	switch answer := p.ask("رمز جدید (برای حذف رمز عبارت - را بزنید)"); answer {
+	switch answer := p.ask("New password (enter - to remove the password)"); answer {
 	case "": // unchanged
 	case "-":
 		room.Password = ""
 	default:
 		room.Password = answer
 	}
-	if raw := p.ask("ظرفیت جدید"); raw != "" {
+	if raw := p.ask("New capacity"); raw != "" {
 		n, err := strconv.Atoi(raw)
 		if err != nil || n < 1 {
-			p.warn("ظرفیت باید عددی بزرگ‌تر از صفر باشد")
+			p.warn("Capacity must be a number greater than zero")
 			return
 		}
 		room.Capacity = n
 	}
 
 	if err := p.store.UpdateRoom(ctx, room); err != nil {
-		p.warn("خطا: " + err.Error())
+		p.warn("Error: " + err.Error())
 		return
 	}
-	p.okLive("ذخیره شد")
+	p.okLive("Saved")
 }
 
 func (p *Panel) deleteRoom(ctx context.Context, list []storage.Room) {
-	room, ok := p.pickRoom("شمارهٔ روم برای حذف", list)
+	room, ok := p.pickRoom("Number of the room to delete", list)
 	if !ok {
 		return
 	}
-	p.printf("\n  روم «%s» و تمام محتوای آن حذف می‌شود.\n", room.Name)
-	if p.ask("مطمئنید؟ (y/n)") != "y" {
-		p.warn("لغو شد")
+	p.printf("\n  Room \"%s\" and everything in it will be deleted.\n", room.Name)
+	if p.ask("Are you sure? (y/n)") != "y" {
+		p.warn("Cancelled")
 		return
 	}
 	if err := p.store.DeleteRoom(ctx, room.ID); err != nil {
-		p.warn("خطا: " + err.Error())
+		p.warn("Error: " + err.Error())
 		return
 	}
-	p.okLive("روم حذف شد")
+	p.okLive("Room deleted")
 }
 
 // pickRoom asks for a row number from the listing.
 func (p *Panel) pickRoom(prompt string, list []storage.Room) (storage.Room, bool) {
 	if len(list) == 0 {
-		p.warn("رومی وجود ندارد")
+		p.warn("There are no rooms")
 		return storage.Room{}, false
 	}
 	p.println("")
 	raw := p.ask(prompt)
 	n, err := strconv.Atoi(raw)
 	if err != nil || n < 1 || n > len(list) {
-		p.warn("شمارهٔ نامعتبر")
+		p.warn("Invalid number")
 		return storage.Room{}, false
 	}
 	return list[n-1], true
 }
 
 func (p *Panel) askRoomName(prompt string) (string, bool) {
-	name, err := textutil.NormalizeName(p.ask(prompt), "نام روم",
+	name, err := textutil.NormalizeName(p.ask(prompt), "room name",
 		rooms.RoomNameMinLen, rooms.RoomNameMaxLen)
 	if err != nil {
 		p.warn(err.Error())
@@ -178,7 +178,7 @@ func (p *Panel) askRoomName(prompt string) (string, bool) {
 
 func hasPassword(pw string) string {
 	if pw == "" {
-		return "ندارد"
+		return "no"
 	}
-	return "دارد"
+	return "yes"
 }

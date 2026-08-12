@@ -44,7 +44,7 @@ func Load(ctx context.Context, store SettingsStore) (*Config, error) {
 			continue
 		}
 		if err := s.check(v); err != nil {
-			return nil, fmt.Errorf("مقدار ذخیره‌شدهٔ نامعتبر: %w", err)
+			return nil, fmt.Errorf("invalid stored value: %w", err)
 		}
 		values[k] = v
 	}
@@ -76,7 +76,7 @@ func (c *Config) Reload(ctx context.Context) (int, error) {
 		if err := s.check(v); err != nil {
 			// One bad row must not take the whole configuration down: keep the
 			// value that is already running and report it.
-			return 0, fmt.Errorf("مقدار ذخیره‌شدهٔ نامعتبر: %w", err)
+			return 0, fmt.Errorf("invalid stored value: %w", err)
 		}
 		fresh[k] = v
 	}
@@ -105,7 +105,7 @@ func (c *Config) Reload(ctx context.Context) (int, error) {
 func (c *Config) Set(ctx context.Context, key, value string) error {
 	s, ok := Lookup(key)
 	if !ok {
-		return fmt.Errorf("کلید ناشناخته: %s", key)
+		return fmt.Errorf("unknown key: %s", key)
 	}
 	value = strings.TrimSpace(value)
 	if err := s.check(value); err != nil {
@@ -130,7 +130,7 @@ func (c *Config) Set(ctx context.Context, key, value string) error {
 func (c *Config) Reset(ctx context.Context, key string) error {
 	s, ok := Lookup(key)
 	if !ok {
-		return fmt.Errorf("کلید ناشناخته: %s", key)
+		return fmt.Errorf("unknown key: %s", key)
 	}
 	if err := c.store.DeleteSetting(ctx, key); err != nil {
 		return err
@@ -209,12 +209,12 @@ func (c *Config) Snapshot() map[string]string {
 func Display(s Setting, value string) string {
 	if s.Kind == KindSecret {
 		if value == "" {
-			return "(تنظیم نشده)"
+			return "(not set)"
 		}
 		return "••••••••"
 	}
 	if value == "" {
-		return "(خالی)"
+		return "(empty)"
 	}
 	return value
 }

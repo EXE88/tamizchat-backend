@@ -40,7 +40,7 @@ func (s *Store) BackupTo(ctx context.Context, dir string) (Backup, error) {
 	path := filepath.Join(dir, name)
 
 	if _, err := os.Stat(path); err == nil {
-		return Backup{}, fmt.Errorf("یک بکاپ با همین نام وجود دارد: %s", name)
+		return Backup{}, fmt.Errorf("a backup with that name already exists: %s", name)
 	}
 
 	// The path goes into SQL text, so a quote in it would break the statement.

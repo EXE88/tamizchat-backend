@@ -15,6 +15,7 @@ func TestTokenIsSignedAndCarriesTheGrant(t *testing.T) {
 		secret = "a-very-secret-value"
 	)
 
+	// A non-ASCII display name on purpose: it has to survive the JWT round trip.
 	token, err := joinToken(key, secret, "room-7", "client-uuid", "دانیال",
 		Rights{Speak: true}, 10*time.Minute)
 	if err != nil {

@@ -31,13 +31,13 @@ func (g *Gateway) handleMediaToken(sess *session.Session, env protocol.Envelope)
 func (g *Gateway) handleMediaSetState(sess *session.Session, env protocol.Envelope) {
 	var state protocol.MediaState
 	if err := json.Unmarshal(env.Data, &state); err != nil {
-		sess.SendError(env.ID, protocol.ErrBadRequest, "محتوای پیام معتبر نیست")
+		sess.SendError(env.ID, protocol.ErrBadRequest, "the message payload is not valid")
 		return
 	}
 
 	roomID := sess.RoomID()
 	if roomID == "" {
-		sess.SendError(env.ID, protocol.ErrNotInRoom, "برای این کار باید داخل یک روم باشید")
+		sess.SendError(env.ID, protocol.ErrNotInRoom, "you must be in a room to do that")
 		return
 	}
 
@@ -81,11 +81,11 @@ func (g *Gateway) dropFromMedia(sess *session.Session) {
 func (g *Gateway) replyMediaError(sess *session.Session, id string, err error) {
 	switch {
 	case errors.Is(err, media.ErrDisabled):
-		sess.SendError(id, protocol.ErrMediaDisabled, "ویس و ویدیو در این سرور فعال نیست")
+		sess.SendError(id, protocol.ErrMediaDisabled, "voice and video are not enabled on this server")
 	case errors.Is(err, media.ErrNotInRoom):
-		sess.SendError(id, protocol.ErrNotInRoom, "برای ویس باید داخل یک روم باشید")
+		sess.SendError(id, protocol.ErrNotInRoom, "you must be in a room to use voice")
 	default:
 		slog.Error("media token failed", "client_uuid", sess.ClientUUID, "err", err)
-		sess.SendError(id, protocol.ErrInternal, "خطای داخلی سرور")
+		sess.SendError(id, protocol.ErrInternal, "internal server error")
 	}
 }

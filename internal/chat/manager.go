@@ -117,7 +117,7 @@ func (m *Manager) Send(sess *session.Session, req protocol.ChatSend) (protocol.M
 			return protocol.Message{}, ErrStickersDisabled
 		}
 		if !stickerPattern.MatchString(sticker) {
-			return protocol.Message{}, invalid("شناسهٔ استیکر معتبر نیست")
+			return protocol.Message{}, invalid("the sticker ID is not valid")
 		}
 		msg.Kind = protocol.MessageSticker
 		msg.StickerID = sticker
@@ -209,7 +209,7 @@ func (m *Manager) Edit(sess *session.Session, req protocol.ChatEdit) (protocol.M
 			return ErrForbidden
 		}
 		if msg.Kind != protocol.MessageText {
-			return invalid("فقط پیام متنی قابل ویرایش است")
+			return invalid("only text messages can be edited")
 		}
 		msg.Text = text
 		msg.EditedAt = time.Now().Unix()

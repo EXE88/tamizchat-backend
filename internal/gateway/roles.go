@@ -72,7 +72,7 @@ func (g *Gateway) handleRoleUpdate(ctx context.Context, sess *session.Session, e
 
 	var req protocol.RoleSpec
 	if err := json.Unmarshal(env.Data, &req); err != nil {
-		sess.SendError(env.ID, protocol.ErrBadRequest, "محتوای پیام معتبر نیست")
+		sess.SendError(env.ID, protocol.ErrBadRequest, "the message payload is not valid")
 		return
 	}
 	spec, ok := g.decodeRoleSpec(sess, env)
@@ -102,7 +102,7 @@ func (g *Gateway) handleRoleDelete(ctx context.Context, sess *session.Session, e
 
 	var req protocol.RoleRef
 	if err := json.Unmarshal(env.Data, &req); err != nil {
-		sess.SendError(env.ID, protocol.ErrBadRequest, "محتوای پیام معتبر نیست")
+		sess.SendError(env.ID, protocol.ErrBadRequest, "the message payload is not valid")
 		return
 	}
 	if err := g.access.DeleteRole(ctx, req.RoleID); err != nil {
@@ -130,7 +130,7 @@ func (g *Gateway) changeAssignment(ctx context.Context, sess *session.Session, e
 
 	var req protocol.RoleAssignment
 	if err := json.Unmarshal(env.Data, &req); err != nil {
-		sess.SendError(env.ID, protocol.ErrBadRequest, "محتوای پیام معتبر نیست")
+		sess.SendError(env.ID, protocol.ErrBadRequest, "the message payload is not valid")
 		return
 	}
 
@@ -160,7 +160,7 @@ func (g *Gateway) changeAssignment(ctx context.Context, sess *session.Session, e
 func (g *Gateway) decodeRoleSpec(sess *session.Session, env protocol.Envelope) (access.RoleSpec, bool) {
 	var req protocol.RoleSpec
 	if err := json.Unmarshal(env.Data, &req); err != nil {
-		sess.SendError(env.ID, protocol.ErrBadRequest, "محتوای پیام معتبر نیست")
+		sess.SendError(env.ID, protocol.ErrBadRequest, "the message payload is not valid")
 		return access.RoleSpec{}, false
 	}
 
@@ -177,14 +177,14 @@ func (g *Gateway) decodeRoleSpec(sess *session.Session, env protocol.Envelope) (
 func (g *Gateway) roleWithinReach(sess *session.Session, env protocol.Envelope, spec access.RoleSpec) bool {
 	if spec.Priority != nil && *spec.Priority >= g.policy.Priority(sess.ClientUUID) {
 		sess.SendError(env.ID, protocol.ErrOutranked,
-			"نمی‌توانید رولی هم‌رتبه یا بالاتر از خودتان بسازید")
+			"you cannot create a role ranked equal to or above your own")
 		return false
 	}
 	if spec.Permissions != nil {
 		mine := g.permissionsOf(sess.ClientUUID)
 		if *spec.Permissions&^mine != 0 {
 			sess.SendError(env.ID, protocol.ErrForbidden,
-				"نمی‌توانید مجوزی بدهید که خودتان ندارید")
+				"you cannot grant a permission you do not have yourself")
 			return false
 		}
 	}

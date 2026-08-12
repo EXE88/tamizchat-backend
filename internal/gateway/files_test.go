@@ -96,6 +96,8 @@ func TestUploadBecomesAMessageInTheRoom(t *testing.T) {
 	alice.expect(protocol.TypeUserJoined)
 	alice.expect(protocol.TypeRoomMemberJoined)
 
+	// A non-ASCII file name on purpose: names round-trip as UTF-8 and must not
+	// be mangled on the way through the upload ticket.
 	attachment := f.upload(t, alice, "گزارش.txt", []byte("hello file"))
 	if attachment.Name != "گزارش.txt" || attachment.Size != 10 {
 		t.Fatalf("unexpected attachment: %+v", attachment)

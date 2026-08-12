@@ -27,7 +27,7 @@ func (g *Gateway) handleBotControl(ctx context.Context, sess *session.Session, e
 
 	var req protocol.BotControl
 	if err := json.Unmarshal(env.Data, &req); err != nil {
-		sess.SendError(env.ID, protocol.ErrBadRequest, "محتوای پیام معتبر نیست")
+		sess.SendError(env.ID, protocol.ErrBadRequest, "the message payload is not valid")
 		return
 	}
 
@@ -51,7 +51,7 @@ func (g *Gateway) handleBotMove(ctx context.Context, sess *session.Session, env 
 
 	var req protocol.BotMove
 	if err := json.Unmarshal(env.Data, &req); err != nil {
-		sess.SendError(env.ID, protocol.ErrBadRequest, "محتوای پیام معتبر نیست")
+		sess.SendError(env.ID, protocol.ErrBadRequest, "the message payload is not valid")
 		return
 	}
 
@@ -78,18 +78,18 @@ func trackTitle(view protocol.Bot) string {
 func (g *Gateway) replyBotError(sess *session.Session, id string, err error) {
 	switch {
 	case errors.Is(err, bots.ErrNotFound):
-		sess.SendError(id, protocol.ErrBotNotFound, "چنین باتی وجود ندارد")
+		sess.SendError(id, protocol.ErrBotNotFound, "no such bot exists")
 	case errors.Is(err, bots.ErrDisabled):
-		sess.SendError(id, protocol.ErrBotDisabled, "این بات غیرفعال است")
+		sess.SendError(id, protocol.ErrBotDisabled, "that bot is disabled")
 	case errors.Is(err, bots.ErrEmptyQueue):
-		sess.SendError(id, protocol.ErrBotEmpty, "فولدر موسیقی این بات خالی است")
+		sess.SendError(id, protocol.ErrBotEmpty, "that bot's music folder is empty")
 	case errors.Is(err, bots.ErrBadAction):
-		sess.SendError(id, protocol.ErrBotAction, "این دستور برای بات شناخته نمی‌شود")
+		sess.SendError(id, protocol.ErrBotAction, "that command is not recognised for a bot")
 	case errors.Is(err, bots.ErrNoRoom):
-		sess.SendError(id, protocol.ErrRoomNotFound, "اول بات را به یک روم منتقل کنید")
+		sess.SendError(id, protocol.ErrRoomNotFound, "move the bot into a room first")
 	case errors.Is(err, bots.ErrNoMedia):
 		sess.SendError(id, protocol.ErrMediaDisabled,
-			"برای پخش موسیقی باید LiveKit تنظیم و فعال باشد")
+			"LiveKit must be configured and enabled to play music")
 	default:
 		var invalid *bots.ValidationError
 		if errors.As(err, &invalid) {
@@ -97,6 +97,6 @@ func (g *Gateway) replyBotError(sess *session.Session, id string, err error) {
 			return
 		}
 		slog.Error("bot operation failed", "client_uuid", sess.ClientUUID, "err", err)
-		sess.SendError(id, protocol.ErrInternal, "خطای داخلی سرور")
+		sess.SendError(id, protocol.ErrInternal, "internal server error")
 	}
 }

@@ -1,235 +1,240 @@
-# نقشهٔ راه بک‌اند TamizChat
+# TamizChat backend roadmap
 
-هر فاز یک واحد مستقل و قابل تست است. تا وقتی فازی «تمام» علامت نخورده، فاز بعد شروع نمی‌شود.
+Each phase is an independent, testable unit. A phase does not start until the
+previous one is marked "done".
 
-| فاز | عنوان | وضعیت |
+| Phase | Title | Status |
 |----|-------|-------|
-| ۱ | اسکلت پروژه، کانفیگ، دیتابیس، پنل ادمین اولیه | ✅ تمام |
-| ۲ | هویت کاربر و WebSocket gateway | ✅ تمام |
-| ۳ | روم‌ها (ساخت/ویرایش/حذف/رمز/ظرفیت/پاک‌سازی) | ✅ تمام |
-| ۴ | چت متنی، استیکر، وضعیت تایپ | ✅ تمام |
-| ۵ | رول‌ها، مجوزها و سیستم ادمینی | ✅ تمام |
-| ۶ | ارسال فایل و عکس (موقت) | ✅ تمام |
-| ۷ | ویس/ویدیو/اسکرین‌شیر با LiveKit | ✅ تمام |
-| ۸ | Paint board بلادرنگ | ✅ تمام |
-| ۹ | بات‌ها (بات موسیقی و کنترل آن) | ✅ تمام |
-| ۱۰ | پنل مدیریت کامل + کنترل زندهٔ سرور | ✅ تمام |
-| ۱۱ | سخت‌سازی، تست، بسته‌بندی و انتشار | ✅ تمام |
+| 1 | Project skeleton, config, database, first admin panel | ✅ done |
+| 2 | User identity and the WebSocket gateway | ✅ done |
+| 3 | Rooms (create/edit/delete/password/capacity/purge) | ✅ done |
+| 4 | Text chat, stickers, typing indicator | ✅ done |
+| 5 | Roles, permissions and moderation | ✅ done |
+| 6 | File and image transfer (temporary) | ✅ done |
+| 7 | Voice/video/screen share with LiveKit | ✅ done |
+| 8 | Real-time paint board | ✅ done |
+| 9 | Bots (music bot and its controls) | ✅ done |
+| 10 | Full admin panel + live server control | ✅ done |
+| 11 | Hardening, testing, packaging and release | ✅ done |
 
 ---
 
-## فاز ۱ — اسکلت (تمام شد)
+## Phase 1 — skeleton (done)
 
-- ماژول Go، ساختار `cmd/` + `internal/`
-- SQLite بدون CGo (`modernc.org/sqlite`) + سیستم مهاجرت forward-only
-- کانفیگ در دیتابیس به‌جای `.env`، با رجیستری تایپ‌دار و اعتبارسنجی
-- لاگ ساخت‌یافته (`log/slog`) با تغییر سطح در زمان اجرا
-- HTTP: `GET /healthz` و `GET /api/v1/server-info`
-- شناسهٔ ثابت سرور (`server_uuid`) که در اولین اجرا ساخته می‌شود
-- پنل مدیریت تعاملی کامندلاین (منوی شماره‌ای، سبک x-ui)
-- خاموش‌شدن تمیز با SIGINT/SIGTERM
+- Go module, `cmd/` + `internal/` layout
+- CGo-free SQLite (`modernc.org/sqlite`) + a forward-only migration system
+- Config in the database instead of `.env`, with a typed registry and validation
+- Structured logging (`log/slog`) with a level that can change at runtime
+- HTTP: `GET /healthz` and `GET /api/v1/server-info`
+- A stable server identity (`server_uuid`) created on first run
+- Interactive command-line admin panel (numbered menu, x-ui style)
+- Clean shutdown on SIGINT/SIGTERM
 
-## فاز ۲ — هویت کاربر و WebSocket gateway (تمام شد)
+## Phase 2 — user identity and the WebSocket gateway (done)
 
-- پروتکل نسخه‌دار با پاکت `{t, id, d}` — مستند کامل در [PROTOCOL.md](PROTOCOL.md)
-- اندپوینت `GET /ws` با handshake اجباری `hello` و مهلت ۱۰ ثانیه‌ای
-- ورود با `client_uuid` + `username` + رمز سرور (مقایسهٔ constant-time)
-- جدول `users` و ثبت اولین/آخرین حضور و تعداد بازدید
-- مدیریت نشست‌ها در حافظه، heartbeat با ping، حذف کلاینت کند
-- اتصال دوبارهٔ یک UUID، نشست قبلی را جایگزین می‌کند بدون ایجاد نویز presence
-- رویدادهای `user.joined` / `user.left` / `user.updated` و پیام `rename`
-- اعتبارسنجی نام کاربری شامل مسدودکردن کاراکترهای جهت‌دهی متن (ضد جعل هویت)
-- بخش «کاربران شناخته‌شده» در پنل مدیریت
-- تست: ۳۱ تست/زیرتست در سه پکیج (gateway، httpapi، session)
+- Versioned protocol with a `{t, id, d}` envelope — fully documented in [PROTOCOL.md](PROTOCOL.md)
+- `GET /ws` endpoint with a mandatory `hello` handshake and a 10-second deadline
+- Login with `client_uuid` + `username` + server password (constant-time comparison)
+- A `users` table recording first/last seen and visit count
+- In-memory session management, heartbeat pings, slow clients dropped
+- Reconnecting with the same UUID replaces the previous session without presence noise
+- `user.joined` / `user.left` / `user.updated` events and the `rename` message
+- Username validation that blocks bidirectional text characters (anti-impersonation)
+- A "Known users" section in the admin panel
+- Tests: 31 tests/subtests across three packages (gateway, httpapi, session)
 
-## فاز ۳ — روم‌ها (تمام شد)
+## Phase 3 — rooms (done)
 
-- جدول `rooms` برای بخش دائمی (نام، رمز، ظرفیت، ترتیب) + مهاجرت ۰۰۰۴
-- پکیج `rooms`: تعریف دائمی + وضعیت زندهٔ درون‌حافظه‌ای در کنار هم
-- نقطهٔ اتصال `Ephemeral` برای محتوای موقت روم؛ فازهای ۴/۶/۸ خودشان را
-  ثبت می‌کنند و منطق پاک‌سازی لازم نیست بداند چه چیزی را پاک می‌کند
-- `room.list/join/leave/create/update/delete` + رویدادهای متناظر
-- رمز روم (مقایسهٔ constant-time)، ظرفیت، سقف تعداد روم، نام یکتا
-- پاک‌سازی محتوا با خروج آخرین نفر، با مهلت `rooms.purge_grace_sec` و
-  لغو خودکار اگر کسی برگردد
-- انتقال عضویت روم هنگام اتصال دوباره، تا نشست مرده در روم جا نماند
-- بخش «مدیریت روم‌ها» در پنل ادمین
-- `internal/authz` به‌عنوان تنها نقطهٔ کنترل مجوز — فاز ۵ جایش را می‌گیرد
-- تست انتها به انتها روی سرور واقعی (`internal/app`)
+- A `rooms` table for the durable part (name, password, capacity, position) + migration 0004
+- The `rooms` package: the durable definition and the live in-memory state side by side
+- The `Ephemeral` hook for temporary room content; phases 4/6/8 register themselves,
+  so the purge logic never needs to know what it is erasing
+- `room.list/join/leave/create/update/delete` and the matching events
+- Room password (constant-time comparison), capacity, room count limit, unique names
+- Content purged when the last member leaves, after a `rooms.purge_grace_sec`
+  grace period that is cancelled automatically if somebody returns
+- Room membership transferred on reconnect, so a dead session is not left in a room
+- A "Rooms" section in the admin panel
+- `internal/authz` as the single permission checkpoint — phase 5 replaces it
+- End-to-end test against a real server (`internal/app`)
 
-نکتهٔ مهم: رول لازم برای ورود به روم عمداً به فاز ۵ موکول شد، چون بدون سیستم
-رول معنایی ندارد.
+Important note: the role required to enter a room was deliberately deferred to
+phase 5, because it means nothing without a role system.
 
-## فاز ۴ — چت متنی (تمام شد)
+## Phase 4 — text chat (done)
 
-- بافر پیام درون‌حافظه‌ای هر روم که خودش را به‌عنوان `rooms.Ephemeral` ثبت
-  می‌کند؛ یعنی پاک‌سازی فاز ۳ بدون تغییر، چت را هم پاک می‌کند
-- `chat.send/history/edit/delete/typing` + رویدادهای متناظر
-- صفحه‌بندی به عقب با `before_seq` و پرچم `has_more`
-- سقف تعداد پیام در بافر (`rooms.history_limit`) با حذف قدیمی‌ترها
-- استیکر به‌صورت شناسه (`sticker_id`)؛ خودِ تصویر سمت کلاینت است
-- محدودکنندهٔ نرخ token bucket در `internal/ratelimit`، جدا برای ارسال و تایپ
-- پیام رد‌شده از سهمیهٔ نرخ کم نمی‌کند
-- ویرایش فقط برای نویسنده — حتی مدیر هم نمی‌تواند متن دیگری را عوض کند
-- `rooms.Manager.OnDelete` تا حذف روم، حافظهٔ چتش را هم آزاد کند
-- تست: ۳۱ تست تازه (چت روی سوکت + واحدِ بافر + واحدِ ratelimit)
+- A per-room in-memory message buffer that registers itself as `rooms.Ephemeral`;
+  the phase-3 purge therefore erases chat too, unchanged
+- `chat.send/history/edit/delete/typing` and the matching events
+- Backwards pagination with `before_seq` and a `has_more` flag
+- A buffer message cap (`rooms.history_limit`) that drops the oldest
+- Stickers as an ID (`sticker_id`); the image itself lives on the client
+- A token-bucket rate limiter in `internal/ratelimit`, separate for sends and typing
+- A rejected message does not spend rate quota
+- Editing is author-only — not even a moderator may change someone else's text
+- `rooms.Manager.OnDelete` so deleting a room also frees its chat memory
+- Tests: 31 new tests (chat over the socket + buffer unit + ratelimit unit)
 
-موکول‌شده به بعد: پاسخ‌دادن به پیام (reply)، پیام‌های سیستمی روم، و بستهٔ
-استیکر میزبانی‌شده روی سرور — این یکی به فاز ۶ وابسته است چون به ذخیره و
-سرو کردن فایل نیاز دارد.
+Deferred: replying to a message, room system messages, and a server-hosted
+sticker pack — the last one depends on phase 6, since it needs file storage
+and serving.
 
-## فاز ۵ — رول‌ها و ادمین (تمام شد)
+## Phase 5 — roles and moderation (done)
 
-- مهاجرت ۰۰۰۵: جداول `roles`، `user_roles`، `sanctions`، `mod_log` و ستون
-  `rooms.required_role_id`
-- بیت‌مسک ۱۲ مجوزی در `internal/authz` با کلیدهای متنی پایدار روی سیم
-- پکیج `internal/access`: کل وضعیت در حافظه (بررسی مجوز در هر پیام اتفاق
-  می‌افتد و نباید به دیسک بخورد)، به‌علاوهٔ پیاده‌سازی `authz.Policy`
-- دو رول داخلی که در اولین اجرا ساخته می‌شوند: «کاربر» (پیش‌فرض برای همه)
-  و «ادمین» (تمام مجوزها). هیچ‌کدام قابل حذف نیستند.
-- قاعدهٔ رتبه: فقط روی کسی می‌شود اقدام کرد که رتبه‌اش اکیداً کمتر باشد؛ و
-  نمی‌شود رولی هم‌رتبه/بالاتر ساخت یا مجوزی داد که خودت نداری
-- `admin.kick/ban/unban/mute/unmute/move/sanctions` و CRUD کامل رول‌ها
-- بن در handshake بررسی می‌شود؛ میوت با اتصال دوباره برطرف نمی‌شود
-- بن و میوت موقت (`duration_sec`) یا دائمی، با پاک‌سازی خودکار منقضی‌ها
-- قفل روم با رول + مجوز عبور از رمز روم
-- لاگ اقدامات مدیریتی (`mod_log`) و نمایشش در پنل
-- بخش‌های «رول‌ها و دسترسی‌ها»، «بن‌ها و میوت‌ها» و «لاگ» در پنل — اولین
-  ادمین سرور از همین‌جا ساخته می‌شود
-- تست: ۱۹ تست تازه در `internal/gateway`
+- Migration 0005: the `roles`, `user_roles`, `sanctions` and `mod_log` tables and
+  the `rooms.required_role_id` column
+- A 12-permission bitmask in `internal/authz` with stable text keys on the wire
+- The `internal/access` package: all state in memory (permissions are checked on
+  every message and must not touch disk), plus the `authz.Policy` implementation
+- Two built-in roles created on first run: "User" (the default for everyone)
+  and "Admin" (all permissions). Neither can be deleted.
+- The priority rule: you may only act on someone strictly below your rank; and
+  you cannot create a role at or above your own rank, or grant a permission you
+  do not hold yourself
+- `admin.kick/ban/unban/mute/unmute/move/sanctions` and full role CRUD
+- Bans are checked during the handshake; a mute is not cleared by reconnecting
+- Temporary (`duration_sec`) or permanent bans and mutes, with expired ones purged automatically
+- Role-locked rooms plus a permission to bypass the room password
+- A moderation log (`mod_log`) shown in the panel
+- The "Roles and permissions", "Bans and mutes" and "Moderation log" panel
+  sections — the server's first admin is created here
+- Tests: 19 new tests in `internal/gateway`
 
-## فاز ۶ — فایل و عکس (تمام شد)
+## Phase 6 — files and images (done)
 
-- پکیج `internal/files`: تیکت آپلود، سهمیهٔ روم، ذخیره روی دیسک، لینک دانلود
-- مجوز آپلود از WebSocket گرفته می‌شود و بایت‌ها از HTTP می‌روند — سرور پیش از
-  دریافت حتی یک بایت، دسترسی و حجم و سهمیه را بررسی می‌کند
-- تیکت آپلود یک‌بارمصرف با عمر ۲ دقیقه؛ لینک دانلود کوتاه‌عمر و محدود به رومی
-  که کاربر همین حالا داخلش است
-- تشخیص نوع فایل از خود بایت‌ها (`http.DetectContentType`)، نه از پسوند
-- تصویر بندانگشتی JPEG با کوچک‌سازی میانگین‌گیرِ سطحی (بدون وابستگی جدید)
-- سرو کردن با `Content-Disposition: attachment` و `nosniff`
-- فایل آپلودشده خودش به‌صورت پیام `file` در روم منتشر می‌شود
-- حذف بایت‌ها از دیسک با پاک‌سازی روم و با حذف روم؛ پاک‌سازی کل پوشه در استارتاپ
-- تست: ۱۵ تست تازه + گسترش تست انتها به انتها
+- The `internal/files` package: upload tickets, per-room quota, disk storage, download links
+- Upload permission comes from the WebSocket and the bytes go over HTTP — the
+  server checks access, size and quota before receiving a single byte
+- A single-use upload ticket with a 2-minute lifetime; a short-lived download
+  link scoped to the room the user is in right now
+- Content type detected from the bytes themselves (`http.DetectContentType`), not the extension
+- A JPEG thumbnail using area-averaging downscaling (no new dependency)
+- Served with `Content-Disposition: attachment` and `nosniff`
+- An uploaded file posts itself into the room as a `file` message
+- Bytes deleted from disk when the room is purged or deleted; the whole folder is
+  cleared at startup
+- Tests: 15 new tests + an extended end-to-end test
 
-موکول‌شده: بستهٔ استیکر میزبانی‌شده روی سرور (که در فاز ۴ به این فاز موکول شده
-بود) هنوز پیاده نشده؛ زیرساخت ذخیرهٔ فایل حالا هست ولی استیکرها برخلاف فایل‌های
-روم باید **دائمی** باشند و به یک مسیر جدا نیاز دارند.
+Deferred: the server-hosted sticker pack (deferred to this phase back in phase 4)
+is still not implemented; the file storage layer exists now, but unlike room
+files, stickers must be **permanent** and need a separate path.
 
-## فاز ۷ — ویس/ویدیو/اسکرین‌شیر (تمام شد)
+## Phase 7 — voice/video/screen share (done)
 
-- پکیج `internal/media`: امضای توکن LiveKit (JWT/HS256) و کلاینت Twirp برای
-  RoomService — بدون افزودن SDK لایوکیت، که یک استک کامل WebRTC را به سروری
-  می‌آورد که هرگز یک بستهٔ RTP هم لمس نمی‌کند
-- سه مجوز تازه: `speak`، `publish_video`، `share_screen` + مهاجرت ۰۰۰۶ که
-  بیت‌های جدید را به رول‌های موجود می‌دهد
-- گرنت توکن دقیقاً مجوزهای کاربر را منعکس می‌کند (`canPublishSources`)، پس
-  کلاینت متخلف از سمت خود LiveKit رد می‌شود
-- نام روم LiveKit = شناسهٔ روم تمیزچت، هویت شرکت‌کننده = `client_uuid`
-- اعمال مدیریت: میوت→`UpdateParticipant`، کیک/بن/خروج→`RemoveParticipant`،
-  حذف روم→`DeleteRoom`
-- `media.set_state` برای آیکون میکروفون/دوربین/صفحه، با ریست هنگام خروج از روم
-- تمام تماس‌های LiveKit best-effort و با timeout هستند؛ خرابی مدیا چت را
-  زمین نمی‌زند
-- تست: ۲۴ تست تازه، شامل یک LiveKit جعلی که تماس‌های واقعی سرور را بررسی می‌کند
+- The `internal/media` package: LiveKit token signing (JWT/HS256) and a Twirp
+  client for RoomService — without pulling in the LiveKit SDK, which would bring
+  a full WebRTC stack into a server that never touches an RTP packet
+- Three new permissions: `speak`, `publish_video`, `share_screen` + migration
+  0006, which grants the new bits to existing roles
+- The token grant mirrors the user's permissions exactly (`canPublishSources`), so
+  a misbehaving client is rejected by LiveKit itself
+- The LiveKit room name is the TamizChat room ID, participant identity is `client_uuid`
+- Moderation applied: mute → `UpdateParticipant`, kick/ban/leave → `RemoveParticipant`,
+  room deletion → `DeleteRoom`
+- `media.set_state` for the mic/camera/screen icons, reset when leaving a room
+- Every LiveKit call is best-effort and has a timeout; a media outage does not take chat down
+- Tests: 24 new tests, including a fake LiveKit that inspects the server's real calls
 
-تصمیم عمدی: وضعیت «در حال صحبت» سمت سرور نگه داشته نمی‌شود — چند بار در ثانیه
-عوض می‌شود و LiveKit خودش رویداد active speaker را به کلاینت‌ها می‌دهد.
+Deliberate decision: "currently speaking" state is not kept server-side — it
+changes several times a second and LiveKit already gives clients the active
+speaker event.
 
-موکول‌شده: وب‌هوک‌های LiveKit (برای اینکه سرور بداند چه کسی واقعاً وارد جلسهٔ
-مدیا شده). فعلاً لازم نشده چون هر تغییر عضویت روم از سمت خود ما آغاز می‌شود.
+Deferred: LiveKit webhooks (so the server knows who actually joined the media
+session). Not needed yet, since every room membership change originates here.
 
-## فاز ۸ — Paint board (تمام شد)
+## Phase 8 — paint board (done)
 
-- پکیج `internal/paint`: تختهٔ هر روم که خودش را `rooms.Ephemeral` ثبت می‌کند
-- خط‌ها **جریانی** هستند: `paint.begin` / `paint.append` / `paint.end` — نقاشی
-  همان‌طور که کشیده می‌شود دیده می‌شود، نه بعد از برداشتن ماوس
-- `paint.append` عمداً پاسخ ندارد (پرتکرارترین پیام سیستم)
-- `paint.undo` آخرین خط خودِ کاربر، `paint.clear` با دامنهٔ `mine` یا `all`
-  (دومی نیازمند `moderate_chat` چون کار دیگران را نابود می‌کند)
-- `paint.state` برای تازه‌واردها؛ سرور خودکار پوش نمی‌کند
-- مختصات نرمال‌شده ۰..۱ + دورریختن NaN/بی‌نهایت (یک کلاینت خراب نباید رندر
-  بقیه را خراب کند)
-- مجوز `paint` + مهاجرت ۰۰۰۷، سقف خط/نقطه، سقف نرخ جدا، منع کاربر میوت‌شده
-- تست: ۲۳ تست تازه (روی سوکت + واحدِ تخته)
+- The `internal/paint` package: a per-room board that registers itself as `rooms.Ephemeral`
+- Strokes are **streamed**: `paint.begin` / `paint.append` / `paint.end` — the
+  drawing is seen as it is drawn, not after the mouse is released
+- `paint.append` deliberately has no reply (the most frequent message in the system)
+- `paint.undo` removes the user's own last stroke; `paint.clear` takes a `mine`
+  or `all` scope (the latter needs `moderate_chat`, since it destroys other people's work)
+- `paint.state` for newcomers; the server does not push it automatically
+- Normalized 0..1 coordinates + NaN/infinity discarded (a broken client must not
+  break everyone else's rendering)
+- The `paint` permission + migration 0007, stroke/point caps, a separate rate
+  limit, and muted users blocked
+- Tests: 23 new tests (over the socket + board unit)
 
-## فاز ۹ — بات‌ها (تمام شد)
+## Phase 9 — bots (done)
 
-- مهاجرت ۰۰۰۸ + جدول `bots`؛ ساخت/ویرایش/حذف از پنل (گزینهٔ ۱۰)
-- **مسیر صدا: LiveKit Ingress.** بک‌اند هیچ بایت صوتی را لمس نمی‌کند؛ Ingress
-  فایل را از `GET /api/v1/bot-stream/{id}?token=` می‌گیرد و خودش منتشر می‌کند
-- پیمایش فولدر (با زیرفولدرها)، مرتب بر اساس نام، تشخیص فایل صوتی از پسوند
+- Migration 0008 + a `bots` table; create/edit/delete from the panel (option 10)
+- **Audio path: LiveKit Ingress.** The backend touches no audio bytes; Ingress
+  fetches the file from `GET /api/v1/bot-stream/{id}?token=` and publishes it itself
+- Folder walking (including subfolders), sorted by name, audio detected by extension
 - `bot.list` / `bot.control` (play/stop/next/prev/select) / `bot.move`
-- انتشار `bot.state` برای همه در هر تغییر
-- وب‌هوک لایوکیت (`POST /api/v1/livekit/webhook`) با تأیید امضا: پایان آهنگ
-  از همین‌جا فهمیده می‌شود و صف خودکار جلو می‌رود
-- توکن پخش یک‌بارمصرف + بررسی دوبارهٔ اینکه فایل داخل فولدر بات است
-- تست: ۲۶ تست تازه، شامل Ingress جعلی و وب‌هوک امضاشدهٔ مستقل
+- `bot.state` broadcast to everyone on every change
+- The LiveKit webhook (`POST /api/v1/livekit/webhook`) with signature verification:
+  end-of-track is learned here and the queue advances automatically
+- A single-use playback token + a re-check that the file really is inside the bot's folder
+- Tests: 26 new tests, including a fake Ingress and an independently signed webhook
 
-تصمیم‌های عمدی:
-- **pause نداریم** — با Ingress، ادامه‌دادن آهنگ را از اول شروع می‌کند و
-  دکمه‌ای که وسط آهنگ را می‌پراند بدتر از نبودنش است.
-- **کنترل صدا سمت سرور نیست** — بلندی صدای بات را هر شنونده در کلاینت خودش
-  تنظیم می‌کند، که هم درست‌تر است هم به دست‌کاری صدا نیاز ندارد.
+Deliberate decisions:
+- **No pause** — with Ingress, resuming restarts the track from the beginning, and
+  a button that jumps out of the middle of a song is worse than no button at all.
+- **No server-side volume control** — each listener sets a bot's volume in their
+  own client, which is both more correct and needs no audio manipulation.
 
-## فاز ۱۰ — پنل مدیریت کامل (تمام شد)
+## Phase 10 — full admin panel (done)
 
-- پکیج `internal/control`: سوکت کنترلی روی loopback با پورت تصادفی، توکن
-  تازه در هر اجرا، و فایل `control.json` کنار دیتابیس با دسترسی ۰۶۰۰
-- **بدهی اصلی پروژه صاف شد:** `reload` زنده برای تنظیمات، رول‌ها و بن‌ها،
-  روم‌ها و بات‌ها. تغییر پنل دیگر منتظر ری‌استارت نمی‌ماند
-- روم حذف‌شده هنگام reload اعضایش را با دلیل `room_deleted` بیرون می‌کند
-- رول اعطاشده از پنل روی کاربرانی که همین الان آنلاین‌اند اعمال می‌شود
-- منوی «کنترل سرور در حال اجرا»: وضعیت لحظه‌ای (uptime، آنلاین، گوروتین،
-  حافظه)، فهرست کاربران آنلاین، اخراج، اعلان سراسری، توقف بات‌ها
-- منوی «اجرای دائمی»: ساخت فایل systemd با مسیرهای همین نصب، پرشده و آمادهٔ
-  نوشتن — با سخت‌سازی‌های `ProtectSystem` و `ReadWritePaths`
-- بعد از هر ویرایش در پنل، اگر سرور در حال اجرا باشد، همان‌جا می‌پرسد
-  «همین حالا اعمال شود؟»
-- تست: ۹ تست تازه روی سرور واقعی، شامل توکن اشتباه و فایل endpoint کهنه
+- The `internal/control` package: a control socket on loopback with a random port,
+  a fresh token each run, and a `control.json` file next to the database at mode 0600
+- **The project's main debt is paid off:** live `reload` for settings, roles and
+  bans, rooms and bots. A panel change no longer waits for a restart
+- On reload, a deleted room ejects its members with the reason `room_deleted`
+- A role granted from the panel applies to users who are online right now
+- The "Running server" menu: live status (uptime, online count, goroutines,
+  memory), the online user list, kick, server-wide notice, stop bots
+- The "systemd service" menu: a unit file for this exact installation, filled in
+  and ready to write — with `ProtectSystem` and `ReadWritePaths` hardening
+- After each panel edit, if the server is running, it asks right there:
+  "apply now?"
+- Tests: 9 new tests against a real server, including a wrong token and a stale
+  endpoint file
 
-تصمیم عمدی: `network.listen_addr` تنها تنظیمی است که با reload اعمال نمی‌شود؛
-listener یک‌بار موقع بالا آمدن bind می‌شود. پنل همان‌جا صریح می‌گوید.
+Deliberate decision: `network.listen_addr` is the one setting reload does not
+apply; the listener binds once at startup. The panel says so explicitly.
 
-موکول‌شده: start/stop/restart مستقیم از پنل. روی لینوکس این کار systemd است
-(پنل فایل سرویس را می‌سازد) و پیاده‌سازی مدیریت پروسه در خود پنل یعنی
-دوباره‌کاری با ابزاری که سیستم‌عامل بهتر انجامش می‌دهد.
+Deferred: start/stop/restart directly from the panel. On Linux that is systemd's
+job (the panel writes the unit file), and implementing process management inside
+the panel would duplicate what the OS does better.
 
-## فاز ۱۱ — سخت‌سازی و انتشار (تمام شد)
+## Phase 11 — hardening and release (done)
 
-- پکیج `internal/guard`: سقف اتصال هم‌زمان هر آی‌پی + سقف نرخ اتصال جدید.
-  رد شدن **پیش از** upgrade اتفاق می‌افتد، پس سیل اتصال فقط یک پاسخ HTTP
-  هزینه دارد نه یک WebSocket
-- تشخیص آی‌پی واقعی پشت reverse proxy با فهرست `network.trusted_proxies`؛
-  هدر X-Forwarded-For فقط از آدرس‌های فهرست‌شده باور می‌شود
-- بازیابی از panic: هم در هر فریم WebSocket، هم در لایهٔ HTTP — یک پیام خراب
-  از یک کلاینت نباید کل سرور را ببرد
-- هدرهای امنیتی روی همهٔ پاسخ‌ها (`nosniff`، `DENY`، CSP بستهٔ کامل)
-- TLS اختیاری داخل سرور (`tls.*`) با حداقل TLS 1.2 و بررسی گواهی موقع
-  بالا آمدن؛ حالت توصیه‌شده همچنان reverse proxy است
-- بکاپ و بازیابی دیتابیس با `VACUUM INTO` (امن حین اجرا)، نگهداری N نسخه،
-  و بازیابی که نسخهٔ فعلی را حذف نمی‌کند — گزینهٔ ۱۳ پنل
-- `Makefile` با تزریق نسخه/کامیت و بیلد چهار پلتفرم (`make release`)
-- [docs/DEPLOY.md](DEPLOY.md): راهنمای کامل اپراتور شامل nginx، LiveKit،
-  Ingress، بکاپ، سخت‌سازی و عیب‌یابی
-- تست: ۲۷ تست تازه، شامل فریم‌های خصمانه (JSON ناقص، نوع اشتباه، null،
-  فریم باینری) که همه باید پاسخ بگیرند نه اینکه چیزی را بشکنند
+- The `internal/guard` package: a per-IP concurrent connection cap plus a new
+  connection rate cap. Rejection happens **before** the upgrade, so a connection
+  flood costs one HTTP response rather than a full WebSocket
+- Real client IP behind a reverse proxy via the `network.trusted_proxies` list;
+  X-Forwarded-For is believed only from listed addresses
+- Panic recovery in both the per-frame WebSocket path and the HTTP layer — one
+  broken message from one client must not take the whole server down
+- Security headers on every response (`nosniff`, `DENY`, a fully closed CSP)
+- Optional in-server TLS (`tls.*`) with a TLS 1.2 minimum and a certificate check
+  at startup; the recommended setup is still a reverse proxy
+- Database backup and restore with `VACUUM INTO` (safe while running), N copies
+  retained, and a restore that does not delete the current copy — panel option 13
+- A `Makefile` with version/commit injection and four-platform builds (`make release`)
+- [docs/DEPLOY.md](DEPLOY.md): the full operator guide covering nginx, LiveKit,
+  Ingress, backups, hardening and troubleshooting
+- Tests: 27 new tests, including hostile frames (truncated JSON, wrong types,
+  null, binary frames) which must all get a reply rather than break something
 
 
 ---
 
-## بعد از فاز ۱۱
+## After phase 11
 
-بک‌اند کامل است. کارهایی که عمداً موکول شدند و هر وقت لازم شد می‌شود سراغشان
-رفت:
+The backend is complete. Work that was deliberately deferred and can be picked
+up whenever it is needed:
 
-- پاسخ به پیام (reply) و پیام‌های سیستمی روم
-- بستهٔ استیکر میزبانی‌شده روی سرور (نیازمند ذخیره‌سازی دائمی جدا از فایل‌های
-  موقت روم)
-- pause واقعی برای بات موسیقی (نیازمند عوض‌کردن مسیر صدا از Ingress به
+- Replying to a message, and room system messages
+- A server-hosted sticker pack (needs permanent storage separate from the
+  temporary room files)
+- Real pause for the music bot (needs the audio path changed from Ingress to
   server-sdk-go)
-- وب‌هوک‌های بیشتر لایوکیت برای دانستن اینکه چه کسی واقعاً در جلسهٔ مدیاست
-- `go test -race` در CI (روی ماشین توسعه gcc نبود)
+- More LiveKit webhooks, to know who is actually in the media session
+- `go test -race` in CI (the dev machine had no gcc)
 
-قدم بعدی پروژه: **فرانت‌اند با C# و WinUI 3** بر اساس
+The project's next step: **the C# / WinUI 3 frontend**, built against
 [PROTOCOL.md](PROTOCOL.md).

@@ -293,7 +293,7 @@ func (m *Manager) selectTrack(ctx context.Context, actorUUID, botID string, inde
 	}
 	if index < 0 || index >= len(b.tracks) {
 		m.mu.Unlock()
-		return protocol.Bot{}, &ValidationError{Msg: "شمارهٔ آهنگ در فهرست نیست"}
+		return protocol.Bot{}, &ValidationError{Msg: "that track number is not in the queue"}
 	}
 	b.index = index
 	m.mu.Unlock()
@@ -522,8 +522,8 @@ func (m *Manager) publicBase() (string, error) {
 	host := strings.TrimSpace(m.cfg.String(config.KeyPublicHost))
 	if host == "" {
 		return "", &ValidationError{
-			Msg: "برای پخش موسیقی باید «هاست عمومی» را در تنظیمات شبکه مقدار بدهید، " +
-				"تا LiveKit بتواند فایل را از این سرور بگیرد",
+			Msg: "to play music you must set \"Public host\" in the network settings, " +
+				"so LiveKit can fetch the file from this server",
 		}
 	}
 	if !strings.HasPrefix(host, "http://") && !strings.HasPrefix(host, "https://") {

@@ -17,30 +17,30 @@ import (
 func (p *Panel) serviceMenu() {
 	p.clear()
 	p.banner()
-	p.printf("  %s\n\n", bold("اجرای دائمی سرور (systemd)"))
+	p.printf("  %s\n\n", bold("Run the server permanently (systemd)"))
 
 	if runtime.GOOS != "linux" {
-		p.printf("  این سیستم %s است و systemd ندارد.\n\n", runtime.GOOS)
-		p.println("  برای اجرای دائمی روی ویندوز از Task Scheduler یا nssm استفاده کنید،")
-		p.println("  و سرور را با دستور زیر اجرا کنید:\n")
+		p.printf("  This system is %s and has no systemd.\n\n", runtime.GOOS)
+		p.println("  To run permanently on Windows use Task Scheduler or nssm,")
+		p.println("  and start the server with:\n")
 		p.printf("    %s run -db %s\n\n", executablePath(), p.store.Path())
 		p.pause()
 		return
 	}
 
 	unit := p.systemdUnit()
-	p.println("  فایل سرویس پیشنهادی:\n")
+	p.println("  Suggested unit file:\n")
 	p.println(dim(indent(unit)))
 
-	p.println("  1) نوشتن در /etc/systemd/system/tamizchat.service")
-	p.println("  2) ذخیره در فایل دلخواه")
-	p.println("  0) بازگشت\n")
+	p.println("  1) Write to /etc/systemd/system/tamizchat.service")
+	p.println("  2) Save to a path of your choice")
+	p.println("  0) Back\n")
 
-	switch p.ask("انتخاب کنید") {
+	switch p.ask("Choose") {
 	case "1":
 		p.writeUnit("/etc/systemd/system/tamizchat.service", unit)
 	case "2":
-		path := p.ask("مسیر فایل")
+		path := p.ask("File path")
 		if path == "" {
 			return
 		}
@@ -50,14 +50,14 @@ func (p *Panel) serviceMenu() {
 
 func (p *Panel) writeUnit(path, unit string) {
 	if err := os.WriteFile(path, []byte(unit), 0o644); err != nil {
-		p.warn("نوشتن فایل ناموفق بود: " + err.Error() +
-			"\n  احتمالاً باید پنل را با sudo اجرا کنید.")
+		p.warn("Could not write the file: " + err.Error() +
+			"\n  You probably need to run the panel with sudo.")
 		return
 	}
 
 	p.println("")
-	p.printf("  %s\n\n", green("نوشته شد: "+path))
-	p.println("  حالا این دستورها را اجرا کنید:\n")
+	p.printf("  %s\n\n", green("Written: "+path))
+	p.println("  Now run these commands:\n")
 	p.println("    sudo systemctl daemon-reload")
 	p.println("    sudo systemctl enable --now tamizchat")
 	p.println("    sudo systemctl status tamizchat\n")

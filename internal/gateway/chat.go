@@ -12,7 +12,7 @@ import (
 func (g *Gateway) handleChatSend(sess *session.Session, env protocol.Envelope) {
 	var req protocol.ChatSend
 	if err := json.Unmarshal(env.Data, &req); err != nil {
-		sess.SendError(env.ID, protocol.ErrBadRequest, "محتوای پیام معتبر نیست")
+		sess.SendError(env.ID, protocol.ErrBadRequest, "the message payload is not valid")
 		return
 	}
 
@@ -30,7 +30,7 @@ func (g *Gateway) handleChatHistory(sess *session.Session, env protocol.Envelope
 	var req protocol.ChatHistoryRequest
 	if len(env.Data) > 0 {
 		if err := json.Unmarshal(env.Data, &req); err != nil {
-			sess.SendError(env.ID, protocol.ErrBadRequest, "محتوای پیام معتبر نیست")
+			sess.SendError(env.ID, protocol.ErrBadRequest, "the message payload is not valid")
 			return
 		}
 	}
@@ -46,7 +46,7 @@ func (g *Gateway) handleChatHistory(sess *session.Session, env protocol.Envelope
 func (g *Gateway) handleChatEdit(sess *session.Session, env protocol.Envelope) {
 	var req protocol.ChatEdit
 	if err := json.Unmarshal(env.Data, &req); err != nil {
-		sess.SendError(env.ID, protocol.ErrBadRequest, "محتوای پیام معتبر نیست")
+		sess.SendError(env.ID, protocol.ErrBadRequest, "the message payload is not valid")
 		return
 	}
 
@@ -61,7 +61,7 @@ func (g *Gateway) handleChatEdit(sess *session.Session, env protocol.Envelope) {
 func (g *Gateway) handleChatDelete(sess *session.Session, env protocol.Envelope) {
 	var req protocol.ChatDelete
 	if err := json.Unmarshal(env.Data, &req); err != nil {
-		sess.SendError(env.ID, protocol.ErrBadRequest, "محتوای پیام معتبر نیست")
+		sess.SendError(env.ID, protocol.ErrBadRequest, "the message payload is not valid")
 		return
 	}
 
@@ -76,7 +76,7 @@ func (g *Gateway) handleChatDelete(sess *session.Session, env protocol.Envelope)
 func (g *Gateway) handleChatTyping(sess *session.Session, env protocol.Envelope) {
 	var req protocol.ChatTyping
 	if err := json.Unmarshal(env.Data, &req); err != nil {
-		sess.SendError(env.ID, protocol.ErrBadRequest, "محتوای پیام معتبر نیست")
+		sess.SendError(env.ID, protocol.ErrBadRequest, "the message payload is not valid")
 		return
 	}
 
@@ -92,25 +92,25 @@ func (g *Gateway) handleChatTyping(sess *session.Session, env protocol.Envelope)
 func (g *Gateway) replyChatError(sess *session.Session, id string, err error) {
 	switch {
 	case errors.Is(err, chat.ErrNotInRoom):
-		sess.SendError(id, protocol.ErrNotInRoom, "برای این کار باید داخل یک روم باشید")
+		sess.SendError(id, protocol.ErrNotInRoom, "you must be in a room to do that")
 	case errors.Is(err, chat.ErrRateLimited):
-		sess.SendError(id, protocol.ErrTooFast, "کمی آرام‌تر — تعداد پیام‌ها بیش از حد مجاز است")
+		sess.SendError(id, protocol.ErrTooFast, "slow down - you are sending messages too fast")
 	case errors.Is(err, chat.ErrForbidden):
-		sess.SendError(id, protocol.ErrForbidden, "اجازهٔ این کار را روی این پیام ندارید")
+		sess.SendError(id, protocol.ErrForbidden, "you are not allowed to do that to this message")
 	case errors.Is(err, chat.ErrNotAllowed):
-		sess.SendError(id, protocol.ErrForbidden, "اجازهٔ ارسال پیام را ندارید")
+		sess.SendError(id, protocol.ErrForbidden, "you are not allowed to send messages")
 	case errors.Is(err, chat.ErrMuted):
-		sess.SendError(id, protocol.ErrMuted, "شما میوت شده‌اید و نمی‌توانید پیام بفرستید")
+		sess.SendError(id, protocol.ErrMuted, "you are muted and cannot send messages")
 	case errors.Is(err, chat.ErrStickersDisabled):
-		sess.SendError(id, protocol.ErrStickersDisabled, "ارسال استیکر در این سرور غیرفعال است")
+		sess.SendError(id, protocol.ErrStickersDisabled, "stickers are disabled on this server")
 	case errors.Is(err, chat.ErrNotFound):
-		sess.SendError(id, protocol.ErrMessageNotFound, "این پیام دیگر در حافظهٔ روم نیست")
+		sess.SendError(id, protocol.ErrMessageNotFound, "that message is no longer in the room's memory")
 	default:
 		var invalid *chat.ValidationError
 		if errors.As(err, &invalid) {
 			sess.SendError(id, protocol.ErrMessageInvalid, invalid.Msg)
 			return
 		}
-		sess.SendError(id, protocol.ErrInternal, "خطای داخلی سرور")
+		sess.SendError(id, protocol.ErrInternal, "internal server error")
 	}
 }

@@ -1,50 +1,51 @@
-# راه‌اندازی سرور TamizChat
+# Setting up a TamizChat server
 
-این راهنما برای کسی است که می‌خواهد سرور را روی ماشین خودش بالا بیاورد.
+This guide is for whoever wants to bring the server up on their own machine.
 
-## کوتاه‌ترین مسیر
+## The shortest path
 
 ```bash
-./tamizchat            # پنل مدیریت باز می‌شود
-./tamizchat run        # سرور اجرا می‌شود
+./tamizchat            # opens the admin panel
+./tamizchat run        # runs the server
 ```
 
-همین. نه فایل `.env`، نه دیتابیس جداگانه، نه سرویس اضافه. اولین اجرا، فایل
-`data/tamizchat.db` را می‌سازد و همه‌چیز داخل آن است.
+That is all. No `.env` file, no separate database, no extra service. The first
+run creates `data/tamizchat.db` and everything lives inside it.
 
-بدون هیچ تنظیمی، چت متنی و روم‌ها و فایل و تختهٔ نقاشی کار می‌کنند. ویس و
-ویدیو و بات موسیقی به LiveKit نیاز دارند (پایین‌تر).
+With no configuration at all, text chat, rooms, files and the paint board work.
+Voice, video and the music bot need LiveKit (see below).
 
-## بیلد
+## Build
 
 ```bash
 make build
 ```
 
-باینری بدون CGo ساخته می‌شود، پس هیچ کتابخانهٔ اشتراکی روی سرور لازم نیست.
-برای ساخت نسخهٔ همهٔ پلتفرم‌ها:
+The binary is built without CGo, so no shared library is needed on the server.
+To build for every platform:
 
 ```bash
 make release
 ```
 
-## اولین کارها در پنل
+## First things to do in the panel
 
-پنل را با `./tamizchat` باز کنید:
+Open the panel with `./tamizchat`:
 
-۱. **گزینهٔ ۲ → تنظیمات عمومی سرور**: نام سرور و در صورت نیاز رمز ورود.
-۲. **گزینهٔ ۷ → رول‌ها و دسترسی‌ها**: رول «ادمین» را به شناسهٔ کلاینت خودتان
-   بدهید. شناسه را کلاینت هنگام نصب می‌سازد؛ یک‌بار وصل شوید تا در
-   **گزینهٔ ۵ (کاربران شناخته‌شده)** ظاهر شود، بعد رول را بدهید.
-۳. **گزینهٔ ۶ → مدیریت روم‌ها**: چند روم بسازید.
+1. **Option 2 → General server settings**: the server name and, if you want one,
+   a password.
+2. **Option 7 → Roles and permissions**: grant the "Admin" role to your own
+   client ID. The client generates that ID at install time; connect once so it
+   shows up under **option 5 (Known users)**, then grant the role.
+3. **Option 6 → Rooms**: create a few rooms.
 
-> تا وقتی به کسی رول ادمین نداده‌اید، هیچ‌کس نمی‌تواند از داخل اپ روم بسازد یا
-> کاربری را اخراج کند. این عمدی است.
+> Until you have given someone the admin role, nobody can create a room or kick
+> a user from inside the app. That is deliberate.
 
-## اجرای دائمی
+## Running permanently
 
-**گزینهٔ ۱۲ پنل** فایل سرویس systemd را با مسیرهای همین نصب می‌سازد و اگر
-دسترسی داشته باشید می‌نویسد. بعدش:
+**Panel option 12** builds a systemd unit file with this installation's paths and
+writes it if you have permission. Then:
 
 ```bash
 sudo systemctl daemon-reload
@@ -52,35 +53,35 @@ sudo systemctl enable --now tamizchat
 sudo systemctl status tamizchat
 ```
 
-## تغییر تنظیمات بدون قطعی
+## Changing settings without downtime
 
-پنل در دیتابیس می‌نویسد و بعد به سرورِ در حال اجرا می‌گوید دوباره بخواند. بعد
-از هر ویرایش خودش می‌پرسد «همین حالا اعمال شود؟».
+The panel writes to the database and then tells the running server to re-read it.
+After each edit it asks "apply now?" on the spot.
 
-از **گزینهٔ ۱۱** هم می‌توانید دستی `reload` بزنید، کاربران آنلاین را ببینید،
-کسی را اخراج کنید یا برای همه اعلان بفرستید.
+From **option 11** you can also trigger a `reload` by hand, see online users,
+kick somebody, or broadcast a notice to everyone.
 
-تنها استثنا `network.listen_addr` است: پورت یک‌بار موقع بالا آمدن گرفته می‌شود
-و تغییرش ری‌استارت می‌خواهد.
+The one exception is `network.listen_addr`: the port is bound once at startup,
+so changing it needs a restart.
 
 ## TLS
 
-دو راه دارید و **راه دوم توصیه می‌شود**:
+There are two ways, and **the second is recommended**:
 
-### پشت reverse proxy (توصیه‌شده)
+### Behind a reverse proxy (recommended)
 
-nginx یا Caddy جلوی سرور بگذارید تا TLS و تمدید گواهی با آن‌ها باشد. در این
-حالت `tls.enabled` را خاموش بگذارید و حتماً این را تنظیم کنید:
+Put nginx or Caddy in front so TLS and certificate renewal are their problem. In
+that case leave `tls.enabled` off and be sure to set:
 
 ```
 network.trusted_proxies = 127.0.0.1
 ```
 
-بدون آن، تمام اتصال‌ها از دید سرور از `127.0.0.1` می‌آیند و سقف «اتصال هر
-آی‌پی» کل اینترنت را یک کاربر حساب می‌کند.
+Without it, every connection looks to the server like it came from `127.0.0.1`,
+and the per-IP connection cap treats the whole internet as one user.
 
-نمونهٔ nginx (به `proxy_set_header Upgrade` دقت کنید — بدونش WebSocket کار
-نمی‌کند):
+An nginx example (mind `proxy_set_header Upgrade` — WebSocket does not work
+without it):
 
 ```nginx
 location / {
@@ -90,102 +91,106 @@ location / {
     proxy_set_header Connection "upgrade";
     proxy_set_header Host $host;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_read_timeout 3600s;   # سوکت‌ها طولانی‌مدت باز می‌مانند
-    client_max_body_size 64m;   # از سقف آپلود بزرگ‌تر باشد
+    proxy_read_timeout 3600s;   # sockets stay open for a long time
+    client_max_body_size 64m;   # must exceed the upload limit
 }
 ```
 
-### TLS مستقیم
+### Direct TLS
 
-اگر چیزی جلوی سرور نیست، در بخش **TLS** پنل مسیر گواهی و کلید را بدهید و
-`tls.enabled` را روشن کنید. سرور موقع بالا آمدن گواهی را می‌خواند و اگر
-خراب باشد صریح خطا می‌دهد به‌جای اینکه بی‌صدا بدون TLS بالا بیاید.
+If nothing sits in front of the server, set the certificate and key paths in the
+panel's **TLS** section and turn `tls.enabled` on. The server reads the
+certificate at startup and fails loudly if it is broken, rather than quietly
+coming up without TLS.
 
-## ویس، ویدیو و اشتراک صفحه (LiveKit)
+## Voice, video and screen sharing (LiveKit)
 
-> راهنمای گام‌به‌گام با فایل‌های آمادهٔ داکر: **[LIVEKIT.md](LIVEKIT.md)**
-> (شامل حالت بدون دامنه و بدون TLS)
+> Step-by-step guide with ready-made Docker files: **[LIVEKIT.md](LIVEKIT.md)**
+> (including a no-domain, no-TLS setup)
 
-سرور TamizChat هیچ بستهٔ صوتی/تصویری را جابه‌جا نمی‌کند؛ فقط توکن امضا می‌کند
-و مدیریت را اعمال می‌کند. مدیا با **LiveKit** است که یک سرویس جداست.
+The TamizChat server moves no audio or video packets; it only signs tokens and
+applies moderation. Media is handled by **LiveKit**, which is a separate service.
 
-۱. LiveKit را بالا بیاورید (داکر ساده‌ترین راه است) و یک `api_key` و
-   `api_secret` بسازید.
-۲. در پنل، بخش **ویس و ویدیو (LiveKit)**:
-   - `livekit.url` → مثلاً `ws://127.0.0.1:7880`
-   - `livekit.api_key` و `livekit.api_secret`
-   - بعد `livekit.enabled` را روشن کنید.
+1. Bring LiveKit up (Docker is the easiest way) and create an `api_key` and
+   `api_secret`.
+2. In the panel, under **Voice and video (LiveKit)**:
+   - `livekit.url` → e.g. `ws://127.0.0.1:7880`
+   - `livekit.api_key` and `livekit.api_secret`
+   - then turn `livekit.enabled` on.
 
-آدرس API سرور خودکار از همان `url` ساخته می‌شود (`ws://` → `http://`).
+The server's API address is derived from that same `url` (`ws://` → `http://`).
 
-## بات موسیقی
+## The music bot
 
-بات‌ها به سرویس **Ingress** لایوکیت نیاز دارند، چون خودِ TamizChat صدا را
-منتشر نمی‌کند.
+Bots need LiveKit's **Ingress** service, because TamizChat itself does not
+publish audio.
 
-۱. `livekit-ingress` را کنار LiveKit بالا بیاورید.
-۲. وب‌هوک LiveKit را به این آدرس بدهید:
-   `https://<هاست شما>/api/v1/livekit/webhook`
-   بدون آن، بات بعد از تمام‌شدن آهنگ اول ساکت می‌ماند.
-۳. **`network.public_host` را حتماً مقدار بدهید** — مثلاً
-   `https://chat.example.com`. Ingress باید فایل موسیقی را از سرور شما
-   بگیرد و سرور نمی‌تواند حدس بزند از بیرون با چه آدرسی دیده می‌شود.
-۴. از **گزینهٔ ۱۰ پنل** بات را با نام و مسیر فولدر موسیقی بسازید. پنل
-   همان‌جا می‌گوید چند فایل قابل پخش پیدا کرده.
+1. Bring `livekit-ingress` up alongside LiveKit.
+2. Point the LiveKit webhook at this address:
+   `https://<your host>/api/v1/livekit/webhook`
+   Without it, the bot goes quiet after the first track finishes.
+3. **You must set `network.public_host`** — for example
+   `https://chat.example.com`. Ingress has to fetch the music file from your
+   server, and the server cannot guess what address it is reachable at from
+   outside.
+4. Create the bot from **panel option 10** with a name and a music folder path.
+   The panel tells you right there how many playable files it found.
 
-فرمت فایل مهم نیست (mp3, ogg, flac, m4a, …) — تبدیل با Ingress است.
+The file format does not matter (mp3, ogg, flac, m4a, …) — Ingress handles the
+conversion.
 
-## بکاپ
+## Backups
 
-**گزینهٔ ۱۳ پنل**. بکاپ با `VACUUM INTO` گرفته می‌شود، پس **حین اجرای سرور
-هم امن است** — برخلاف کپی‌کردن ساده فایل که ممکن است نیمه‌نوشته گیر بیفتد.
+**Panel option 13.** Backups are taken with `VACUUM INTO`, so they are **safe
+while the server is running** — unlike a plain file copy, which can catch a
+half-written page.
 
-برای بکاپ خودکار شبانه، یک cron روی همان فایل کافی است:
+For an automatic nightly backup, a cron entry against the same file is enough:
 
 ```bash
 0 4 * * * cd /opt/tamizchat && sqlite3 data/tamizchat.db \
   "VACUUM INTO 'data/backups/nightly-$(date +\%Y\%m\%d).db'"
 ```
 
-بازیابی از پنل فقط وقتی ممکن است که سرور **متوقف** باشد؛ نسخهٔ فعلی هم حذف
-نمی‌شود و کنارش می‌ماند.
+Restoring from the panel is only possible while the server is **stopped**; the
+current copy is not deleted and is kept alongside.
 
-> چه چیزی در بکاپ هست: تنظیمات، روم‌ها، رول‌ها، بن‌ها، بات‌ها، کاربران شناخته‌شده.
-> چه چیزی نیست: چت، فایل‌ها، نقاشی — این‌ها **عمداً** موقتی‌اند و با خالی‌شدن
-> روم پاک می‌شوند.
+> What is in a backup: settings, rooms, roles, bans, bots, known users.
+> What is not: chat, files, drawings — those are **deliberately** temporary and
+> are erased when a room empties.
 
-## چه چیزی را باز کنید
+## What to open
 
-| پورت | برای چه |
-|------|---------|
-| پورت `listen_addr` (پیش‌فرض ۸۰۸۰) | کلاینت‌ها |
-| ۷۸۸۰ و رنج UDP لایوکیت | فقط اگر LiveKit روی همین ماشین است |
+| Port | For what |
+|------|----------|
+| the `listen_addr` port (default 8080) | clients |
+| 7880 and LiveKit's UDP range | only if LiveKit runs on this same machine |
 
-کانال کنترلی پنل روی **loopback** است و هرگز نباید از بیرون در دسترس باشد.
+The panel's control channel is on **loopback** and must never be reachable from
+outside.
 
-## سخت‌سازی
+## Hardening
 
-پیش‌فرض‌ها برای یک سرور دوستانه تنظیم شده‌اند. اگر سرور عمومی است:
+The defaults are tuned for a friendly server. If yours is public:
 
-- **رمز سرور** بگذارید (`server.password`).
-- `network.max_conns_per_ip` را کم کنید (پیش‌فرض ۸). اگر همه پشت یک NAT
-  هستند، صفر بگذارید تا خاموش شود.
-- `network.handshake_per_minute` را کم کنید.
-- `uploads.max_size_mb` و `uploads.room_quota_mb` را متناسب دیسک تنظیم کنید.
-- سرور را با کاربر غیر روت اجرا کنید (فایل systemd پنل همین کار را می‌کند).
+- Set a **server password** (`server.password`).
+- Lower `network.max_conns_per_ip` (default 8). If everyone is behind one NAT,
+  set it to zero to turn it off.
+- Lower `network.handshake_per_minute`.
+- Tune `uploads.max_size_mb` and `uploads.room_quota_mb` to your disk.
+- Run the server as a non-root user (the panel's systemd file does this).
 
-## عیب‌یابی
+## Troubleshooting
 
-**کلاینت وصل نمی‌شود:** `curl http://<هاست>:<پورت>/healthz` بزنید. اگر جواب
-داد، مشکل از فایروال یا reverse proxy است — به `Upgrade` در کانفیگ nginx دقت
-کنید.
+**A client cannot connect:** run `curl http://<host>:<port>/healthz`. If that
+answers, the problem is the firewall or the reverse proxy — check `Upgrade` in
+the nginx config.
 
-**ویس کار نمی‌کند:** در پنل گزینهٔ ۱۱ ببینید `MediaOK` روشن است یا نه. اگر
-نه، یکی از سه مقدار LiveKit خالی است.
+**Voice does not work:** check whether `MediaOK` is on under panel option 11. If
+not, one of the three LiveKit values is empty.
 
-**بات فقط یک آهنگ می‌خواند:** وب‌هوک لایوکیت به سرور نمی‌رسد.
+**The bot plays only one track:** the LiveKit webhook is not reaching the server.
 
-**بات اصلاً پخش نمی‌کند:** `network.public_host` را چک کنید.
+**The bot plays nothing at all:** check `network.public_host`.
 
-**لاگ بیشتر:** `log.level` را روی `debug` بگذارید — بدون ری‌استارت اعمال
-می‌شود.
+**More logging:** set `log.level` to `debug` — it applies without a restart.

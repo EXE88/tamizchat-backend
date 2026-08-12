@@ -13,7 +13,7 @@ import (
 func (g *Gateway) handleFileUploadRequest(sess *session.Session, env protocol.Envelope) {
 	var req protocol.FileUploadRequest
 	if err := json.Unmarshal(env.Data, &req); err != nil {
-		sess.SendError(env.ID, protocol.ErrBadRequest, "محتوای پیام معتبر نیست")
+		sess.SendError(env.ID, protocol.ErrBadRequest, "the message payload is not valid")
 		return
 	}
 
@@ -28,7 +28,7 @@ func (g *Gateway) handleFileUploadRequest(sess *session.Session, env protocol.En
 func (g *Gateway) handleFileDownloadToken(sess *session.Session, env protocol.Envelope) {
 	var req protocol.FileDownloadRequest
 	if err := json.Unmarshal(env.Data, &req); err != nil {
-		sess.SendError(env.ID, protocol.ErrBadRequest, "محتوای پیام معتبر نیست")
+		sess.SendError(env.ID, protocol.ErrBadRequest, "the message payload is not valid")
 		return
 	}
 
@@ -54,21 +54,21 @@ func (g *Gateway) AnnounceUpload(uploader *session.Session, file files.File) {
 func (g *Gateway) replyFileError(sess *session.Session, id string, err error) {
 	switch {
 	case errors.Is(err, files.ErrDisabled):
-		sess.SendError(id, protocol.ErrUploadsDisabled, "ارسال فایل در این سرور غیرفعال است")
+		sess.SendError(id, protocol.ErrUploadsDisabled, "file uploads are disabled on this server")
 	case errors.Is(err, files.ErrForbidden):
-		sess.SendError(id, protocol.ErrForbidden, "اجازهٔ ارسال فایل را ندارید")
+		sess.SendError(id, protocol.ErrForbidden, "you are not allowed to send files")
 	case errors.Is(err, files.ErrNotInRoom):
-		sess.SendError(id, protocol.ErrNotInRoom, "برای ارسال فایل باید داخل یک روم باشید")
+		sess.SendError(id, protocol.ErrNotInRoom, "you must be in a room to send a file")
 	case errors.Is(err, files.ErrTooLarge):
-		sess.SendError(id, protocol.ErrFileTooLarge, "فایل بزرگ‌تر از حد مجاز است")
+		sess.SendError(id, protocol.ErrFileTooLarge, "the file is larger than allowed")
 	case errors.Is(err, files.ErrQuotaFull):
-		sess.SendError(id, protocol.ErrRoomQuotaFull, "سهمیهٔ فایل این روم پر است")
+		sess.SendError(id, protocol.ErrRoomQuotaFull, "this room's file quota is full")
 	case errors.Is(err, files.ErrNotFound):
-		sess.SendError(id, protocol.ErrFileNotFound, "این فایل دیگر در دسترس نیست")
+		sess.SendError(id, protocol.ErrFileNotFound, "that file is no longer available")
 	case errors.Is(err, files.ErrNameRequired):
-		sess.SendError(id, protocol.ErrFileInvalid, "نام فایل معتبر نیست")
+		sess.SendError(id, protocol.ErrFileInvalid, "the file name is not valid")
 	default:
 		slog.Error("file operation failed", "client_uuid", sess.ClientUUID, "err", err)
-		sess.SendError(id, protocol.ErrInternal, "خطای داخلی سرور")
+		sess.SendError(id, protocol.ErrInternal, "internal server error")
 	}
 }

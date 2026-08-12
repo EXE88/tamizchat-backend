@@ -1,52 +1,52 @@
-# کانفیگ LiveKit برای یک سرور کوچک بدون دامنه و بدون TLS.
+# LiveKit config for a small server with no domain and no TLS.
 #
-# قبل از اجرا دو جا را عوض کنید:
-#   1) keys  — کلید و سکرت خودتان (پایین‌تر توضیح داده شده)
-#   2) اگر پشت NAT هستید، بخش external_ip
+# Change two things before you run it:
+#   1) keys  - your own key and secret (explained below)
+#   2) the external_ip section, if you are behind NAT
 
-# پورت سیگنالینگ. کلاینت با ws://<آدرس سرور>:7880 وصل می‌شود.
+# The signalling port. Clients connect to ws://<server address>:7880.
 port: 7880
 
-# لاگ: اگر مدیا وصل نشد، این را روی debug بگذارید.
+# Logging: if media will not connect, set this to debug.
 log_level: info
 
 rtc:
-  # یک پورت UDP به‌جای یک رنج بزرگ. برای سرور کوچک بسیار ساده‌تر است:
-  # فقط همین یک پورت را در فایروال باز می‌کنید.
+  # One UDP port instead of a large range. Much simpler for a small server:
+  # you open exactly this one port in the firewall.
   udp_port: 7882
 
-  # مسیر پشتیبان برای شبکه‌هایی که UDP را می‌بندند (بعضی شرکت‌ها و
-  # کافی‌نت‌ها). کندتر است ولی اتصال را نجات می‌دهد.
+  # A fallback path for networks that block UDP (some offices and internet
+  # cafes). Slower, but it saves the connection.
   tcp_port: 7881
 
-  # LiveKit باید آدرسی را در ICE اعلام کند که کلاینت‌ها واقعاً با آن به
-  # سرور می‌رسند.
+  # LiveKit has to announce an address in ICE that clients can actually reach
+  # the server on.
   #
-  # روی VPS با آی‌پی عمومی: همین true را بگذارید، خودش پیدا می‌کند.
-  # روی سرور خانگی پشت مودم: true را بردارید و آی‌پی عمومی مودم را
-  #   دستی بنویسید، و پورت‌ها را روی مودم forward کنید:
+  # On a VPS with a public IP: leave this true, it will work it out.
+  # On a home server behind a router: remove true and write the router's
+  #   public IP by hand, and forward the ports on the router:
   #     use_external_ip: false
   #     node_ip: 85.x.x.x
-  # فقط شبکهٔ داخلی (همهٔ دوستان روی همان LAN یا VPN):
+  # LAN only (everyone on the same LAN or VPN):
   #     use_external_ip: false
   #     node_ip: 192.168.1.50
   use_external_ip: true
 
-# کلید و سکرتی که TamizChat با آن توکن امضا می‌کند.
+# The key and secret TamizChat signs tokens with.
 #
-# با این دستور یک جفت بسازید:
+# Generate a pair with:
 #   docker run --rm livekit/livekit-server generate-keys
 #
-# یا دستی:
+# Or by hand:
 #   KEY=API$(openssl rand -hex 6); SECRET=$(openssl rand -base64 32)
 #
-# همین دو مقدار را در پنل TamizChat هم وارد می‌کنید.
+# You enter these same two values in the TamizChat panel.
 keys:
   APIchangeme: changeme-this-is-not-a-real-secret
 
-# --- فقط برای بات موسیقی ---
-# Ingress از طریق Redis با LiveKit حرف می‌زند. اگر بات نمی‌خواهید،
-# این بخش را کامنت نگه دارید.
+# --- for the music bot only ---
+# Ingress talks to LiveKit through Redis. If you do not want the bot, leave
+# this section commented out.
 #
 # redis:
 #   address: 127.0.0.1:6379

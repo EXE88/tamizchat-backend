@@ -36,8 +36,8 @@ func TestChatMessageReachesTheRoom(t *testing.T) {
 	alice.expect(protocol.TypeUserJoined)
 	alice.expect(protocol.TypeRoomMemberJoined)
 
-	sent := alice.sendText("  سلام دنیا  ")
-	if sent.Text != "سلام دنیا" {
+	sent := alice.sendText("  hello world  ")
+	if sent.Text != "hello world" {
 		t.Fatalf("message should be trimmed, got %q", sent.Text)
 	}
 	if sent.Kind != protocol.MessageText || sent.RoomID != room.ID || sent.Seq != 1 {
@@ -49,7 +49,7 @@ func TestChatMessageReachesTheRoom(t *testing.T) {
 
 	var received protocol.Message
 	bob.decode(bob.expect(protocol.TypeChatMessage), &received)
-	if received.ID != sent.ID || received.Text != "سلام دنیا" {
+	if received.ID != sent.ID || received.Text != "hello world" {
 		t.Fatalf("Bob received a different message: %+v", received)
 	}
 }
@@ -114,8 +114,8 @@ func TestNewlinesSurviveButControlCharactersDoNot(t *testing.T) {
 	room := alice.createRoom("Lobby", "", 0)
 	alice.joinRoom(room.ID, "")
 
-	msg := alice.sendText("خط اول\r\nخط دوم")
-	if msg.Text != "خط اول\nخط دوم" {
+	msg := alice.sendText("first line\r\nsecond line")
+	if msg.Text != "first line\nsecond line" {
 		t.Fatalf("line endings should be normalized, got %q", msg.Text)
 	}
 

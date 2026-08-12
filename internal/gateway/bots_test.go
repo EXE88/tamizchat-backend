@@ -78,7 +78,7 @@ func (c *client) botControl(action, botID string) protocol.Bot {
 func TestBotsAppearWithTheirQueue(t *testing.T) {
 	f := newFixture(t)
 	folder := musicFolder(t, "a.mp3", "b.ogg", "c.flac")
-	bot := f.addBot(t, "دی‌جی", folder)
+	bot := f.addBot(t, "DJ", folder)
 
 	alice, _ := f.hello(t, uuidA, "Alice", "")
 	alice.send(protocol.TypeBotList, "l1", nil)
@@ -90,7 +90,7 @@ func TestBotsAppearWithTheirQueue(t *testing.T) {
 	}
 
 	got := list.Bots[0]
-	if got.ID != bot.ID || got.Name != "دی‌جی" {
+	if got.ID != bot.ID || got.Name != "DJ" {
 		t.Fatalf("unexpected bot: %+v", got)
 	}
 	if got.TrackCount != 3 {
@@ -103,10 +103,10 @@ func TestBotsAppearWithTheirQueue(t *testing.T) {
 
 func TestBotIsAnnouncedInWelcome(t *testing.T) {
 	f := newFixture(t)
-	f.addBot(t, "دی‌جی", musicFolder(t, "a.mp3"))
+	f.addBot(t, "DJ", musicFolder(t, "a.mp3"))
 
 	_, welcome := f.hello(t, uuidA, "Alice", "")
-	if len(welcome.Bots) != 1 || welcome.Bots[0].Name != "دی‌جی" {
+	if len(welcome.Bots) != 1 || welcome.Bots[0].Name != "DJ" {
 		t.Fatalf("the client should see the bots on connect: %+v", welcome.Bots)
 	}
 }
@@ -116,7 +116,7 @@ func TestMovingABotAndPlaying(t *testing.T) {
 	lk := newFakeLiveKit(t)
 	f.enableMediaForBots(t, lk)
 
-	bot := f.addBot(t, "دی‌جی", musicFolder(t, "one.mp3", "two.mp3"))
+	bot := f.addBot(t, "DJ", musicFolder(t, "one.mp3", "two.mp3"))
 	alice, room := f.roomWith(t)
 
 	// Everyone hears about the move, not just whoever asked for it.
@@ -177,7 +177,7 @@ func TestNextAndPrevWalkTheQueue(t *testing.T) {
 	// The queue is sorted by file name, which is the order the operator sees
 	// in their own file manager — so the names here are numbered rather than
 	// spelled out.
-	bot := f.addBot(t, "دی‌جی", musicFolder(t, "01 first.mp3", "02 second.mp3", "03 third.mp3"))
+	bot := f.addBot(t, "DJ", musicFolder(t, "01 first.mp3", "02 second.mp3", "03 third.mp3"))
 	alice, room := f.roomWith(t)
 
 	alice.send(protocol.TypeBotMove, "m1", protocol.BotMove{BotID: bot.ID, RoomID: room.ID})
@@ -221,7 +221,7 @@ func TestStoppingABotEndsTheIngress(t *testing.T) {
 	lk := newFakeLiveKit(t)
 	f.enableMediaForBots(t, lk)
 
-	bot := f.addBot(t, "دی‌جی", musicFolder(t, "one.mp3"))
+	bot := f.addBot(t, "DJ", musicFolder(t, "one.mp3"))
 	alice, room := f.roomWith(t)
 
 	alice.send(protocol.TypeBotMove, "m1", protocol.BotMove{BotID: bot.ID, RoomID: room.ID})
@@ -246,7 +246,7 @@ func TestTrackEndAdvancesTheQueue(t *testing.T) {
 	lk := newFakeLiveKit(t)
 	f.enableMediaForBots(t, lk)
 
-	bot := f.addBot(t, "دی‌جی", musicFolder(t, "01 first.mp3", "02 second.mp3"))
+	bot := f.addBot(t, "DJ", musicFolder(t, "01 first.mp3", "02 second.mp3"))
 	alice, room := f.roomWith(t)
 
 	alice.send(protocol.TypeBotMove, "m1", protocol.BotMove{BotID: bot.ID, RoomID: room.ID})
@@ -299,7 +299,7 @@ func TestBotControlNeedsPermission(t *testing.T) {
 	lk := newFakeLiveKit(t)
 	f.enableMediaForBots(t, lk)
 
-	bot := f.addBot(t, "دی‌جی", musicFolder(t, "one.mp3"))
+	bot := f.addBot(t, "DJ", musicFolder(t, "one.mp3"))
 	alice, room := f.roomWith(t)
 	bob := f.inRoom(t, uuidB, "Bob", room.ID)
 	alice.expect(protocol.TypeUserJoined)
@@ -324,8 +324,8 @@ func TestPlayingNeedsARoomAndMusic(t *testing.T) {
 	lk := newFakeLiveKit(t)
 	f.enableMediaForBots(t, lk)
 
-	bot := f.addBot(t, "دی‌جی", musicFolder(t, "one.mp3"))
-	empty := f.addBot(t, "خالی", t.TempDir())
+	bot := f.addBot(t, "DJ", musicFolder(t, "one.mp3"))
+	empty := f.addBot(t, "Empty", t.TempDir())
 
 	alice, room := f.roomWith(t)
 
@@ -346,7 +346,7 @@ func TestPlayingNeedsARoomAndMusic(t *testing.T) {
 
 func TestPlayingNeedsMediaConfigured(t *testing.T) {
 	f := newFixture(t)
-	bot := f.addBot(t, "دی‌جی", musicFolder(t, "one.mp3"))
+	bot := f.addBot(t, "DJ", musicFolder(t, "one.mp3"))
 	alice, room := f.roomWith(t)
 
 	alice.send(protocol.TypeBotMove, "m1", protocol.BotMove{BotID: bot.ID, RoomID: room.ID})
@@ -366,7 +366,7 @@ func TestPlayingNeedsThePublicHost(t *testing.T) {
 	lk := newFakeLiveKit(t)
 	f.enableMedia(t, lk) // deliberately without the public host
 
-	bot := f.addBot(t, "دی‌جی", musicFolder(t, "one.mp3"))
+	bot := f.addBot(t, "DJ", musicFolder(t, "one.mp3"))
 	alice, room := f.roomWith(t)
 
 	alice.send(protocol.TypeBotMove, "m1", protocol.BotMove{BotID: bot.ID, RoomID: room.ID})
@@ -375,7 +375,7 @@ func TestPlayingNeedsThePublicHost(t *testing.T) {
 		BotID: bot.ID, Action: protocol.BotActionPlay,
 	})
 	e := alice.expectError(protocol.ErrInvalidInput)
-	if !strings.Contains(e.Message, "هاست عمومی") {
+	if !strings.Contains(e.Message, "Public host") {
 		t.Fatalf("the error should tell the operator what to configure: %q", e.Message)
 	}
 }
@@ -387,7 +387,7 @@ func TestBotStreamNeedsTheCurrentToken(t *testing.T) {
 	lk := newFakeLiveKit(t)
 	f.enableMediaForBots(t, lk)
 
-	bot := f.addBot(t, "دی‌جی", musicFolder(t, "one.mp3"))
+	bot := f.addBot(t, "DJ", musicFolder(t, "one.mp3"))
 	f.expectStreamRefused(t, bot.ID)
 
 	resp, err := http.Get(f.httpURL + "/api/v1/bot-stream/" + bot.ID + "?token=guessed")
@@ -405,7 +405,7 @@ func TestDeletingARoomSendsItsBotsHome(t *testing.T) {
 	lk := newFakeLiveKit(t)
 	f.enableMediaForBots(t, lk)
 
-	bot := f.addBot(t, "دی‌جی", musicFolder(t, "one.mp3"))
+	bot := f.addBot(t, "DJ", musicFolder(t, "one.mp3"))
 	alice, room := f.roomWith(t)
 
 	alice.send(protocol.TypeBotMove, "m1", protocol.BotMove{BotID: bot.ID, RoomID: room.ID})

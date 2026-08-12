@@ -209,10 +209,10 @@ func serve(srv *http.Server, cfg *config.Config) error {
 		cert := strings.TrimSpace(cfg.String(config.KeyTLSCertFile))
 		key := strings.TrimSpace(cfg.String(config.KeyTLSKeyFile))
 		if cert == "" || key == "" {
-			return errors.New("TLS روشن است ولی مسیر گواهی یا کلید تنظیم نشده")
+			return errors.New("TLS is on but the certificate or key path is not set")
 		}
 		if _, statErr := tls.LoadX509KeyPair(cert, key); statErr != nil {
-			return fmt.Errorf("گواهی TLS خوانده نشد: %w", statErr)
+			return fmt.Errorf("could not read the TLS certificate: %w", statErr)
 		}
 		// Anything older than TLS 1.2 is broken; there is no client that needs
 		// it and every reason not to offer it.

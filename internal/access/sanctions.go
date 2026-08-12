@@ -34,7 +34,7 @@ func (m *Manager) Mute(ctx context.Context, actorUUID, targetUUID, username, rea
 
 func (m *Manager) sanction(ctx context.Context, kind, actorUUID, targetUUID, username, reason string, duration time.Duration) (Sanction, error) {
 	if targetUUID == actorUUID {
-		return Sanction{}, &ValidationError{Msg: "نمی‌توانید این کار را روی خودتان انجام دهید"}
+		return Sanction{}, &ValidationError{Msg: "you cannot do that to yourself"}
 	}
 	if actorUUID != "" && m.OutranksOrEqual(actorUUID, targetUUID) {
 		return Sanction{}, ErrOutranked

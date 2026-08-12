@@ -140,19 +140,19 @@ func (g *Gateway) handshake(ctx context.Context, conn *websocket.Conn, remote st
 
 	var env protocol.Envelope
 	if err := json.Unmarshal(data, &env); err != nil {
-		return nil, g.reject(conn, env.ID, protocol.ErrBadRequest, "قالب پیام معتبر نیست")
+		return nil, g.reject(conn, env.ID, protocol.ErrBadRequest, "the message format is not valid")
 	}
 	if env.Type != protocol.TypeHello {
-		return nil, g.reject(conn, env.ID, protocol.ErrHandshake, "اولین پیام باید hello باشد")
+		return nil, g.reject(conn, env.ID, protocol.ErrHandshake, "the first message must be hello")
 	}
 
 	var hello protocol.Hello
 	if err := json.Unmarshal(env.Data, &hello); err != nil {
-		return nil, g.reject(conn, env.ID, protocol.ErrBadRequest, "محتوای hello معتبر نیست")
+		return nil, g.reject(conn, env.ID, protocol.ErrBadRequest, "the hello payload is not valid")
 	}
 	if hello.Protocol != 0 && hello.Protocol != protocol.Version {
 		return nil, g.reject(conn, env.ID, protocol.ErrProtocol,
-			"نسخهٔ پروتکل کلاینت با سرور سازگار نیست")
+			"the client's protocol version is not compatible with the server")
 	}
 
 	clientUUID, err := session.NormalizeClientUUID(hello.ClientUUID)
@@ -167,7 +167,7 @@ func (g *Gateway) handshake(ctx context.Context, conn *websocket.Conn, remote st
 	}
 
 	if ban, banned := g.access.BanOf(clientUUID); banned {
-		message := "شما از این سرور بن شده‌اید"
+		message := "you are banned from this server"
 		if ban.Reason != "" {
 			message += ": " + ban.Reason
 		}
@@ -176,22 +176,22 @@ func (g *Gateway) handshake(ctx context.Context, conn *websocket.Conn, remote st
 
 	if want := g.cfg.String(config.KeyServerPassword); want != "" {
 		if subtle.ConstantTimeCompare([]byte(want), []byte(hello.Password)) != 1 {
-			return nil, g.reject(conn, env.ID, protocol.ErrBadPassword, "رمز سرور نادرست است")
+			return nil, g.reject(conn, env.ID, protocol.ErrBadPassword, "the server password is wrong")
 		}
 	}
 
 	if g.sessions.UsernameTaken(username, clientUUID) {
 		return nil, g.reject(conn, env.ID, protocol.ErrUsernameTaken,
-			"این نام کاربری همین حالا در سرور استفاده می‌شود")
+			"that username is currently in use on the server")
 	}
 
 	sess := session.New(storage.NewUUID(), clientUUID, username, remote)
 	g.applyRoles(sess)
 	replaced, err := g.sessions.Add(sess)
 	if errors.Is(err, session.ErrServerFull) {
-		return nil, g.reject(conn, env.ID, protocol.ErrServerFull, "ظرفیت سرور تکمیل است")
+		return nil, g.reject(conn, env.ID, protocol.ErrServerFull, "the server is full")
 	} else if err != nil {
-		return nil, g.reject(conn, env.ID, protocol.ErrInternal, "خطای داخلی سرور")
+		return nil, g.reject(conn, env.ID, protocol.ErrInternal, "internal server error")
 	}
 
 	if err := g.users.TouchUser(ctx, clientUUID, username); err != nil {

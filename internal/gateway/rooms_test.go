@@ -71,8 +71,8 @@ func TestRoomCreateListAndPersist(t *testing.T) {
 		t.Fatalf("a fresh server should have no rooms, got %d", len(welcome.Rooms))
 	}
 
-	room := alice.createRoom("  گفتگوی   عمومی  ", "", 0)
-	if room.Name != "گفتگوی عمومی" {
+	room := alice.createRoom("  General   chat  ", "", 0)
+	if room.Name != "General chat" {
 		t.Fatalf("room name should be normalized, got %q", room.Name)
 	}
 	if room.Capacity != f.cfg.Int(config.KeyRoomsDefaultMaxUsers) {
@@ -95,7 +95,7 @@ func TestRoomCreateListAndPersist(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list rooms: %v", err)
 	}
-	if len(stored) != 1 || stored[0].Name != "گفتگوی عمومی" {
+	if len(stored) != 1 || stored[0].Name != "General chat" {
 		t.Fatalf("room was not persisted: %+v", stored)
 	}
 }

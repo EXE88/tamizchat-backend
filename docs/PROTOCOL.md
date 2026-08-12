@@ -1,44 +1,44 @@
-# پروتکل کلاینت ↔ سرور
+# Client ↔ server protocol
 
-نسخهٔ فعلی: **۱** (`protocol_version` در `/api/v1/server-info`)
+Current version: **1** (`protocol_version` in `/api/v1/server-info`)
 
-اتصال از طریق WebSocket به `ws://<host>:<port>/ws` برقرار می‌شود.
+The connection is a WebSocket to `ws://<host>:<port>/ws`.
 
-## قالب پاکت
+## Envelope format
 
-هر فریم یک آبجکت JSON با همین شکل است:
+Every frame is a JSON object with this shape:
 
 ```json
-{ "t": "<نوع پیام>", "id": "<شناسهٔ اختیاری درخواست>", "d": { } }
+{ "t": "<message type>", "id": "<optional request id>", "d": { } }
 ```
 
-- `t` — نوع پیام
-- `id` — اگر کلاینت بفرستد، پاسخ سرور همان `id` را برمی‌گرداند تا کلاینت
-  بتواند درخواست و پاسخ را به هم وصل کند. پیام‌هایی که سرور خودش می‌فرستد
-  (مثل ورود و خروج بقیه) `id` ندارند.
-- `d` — محتوای پیام
+- `t` — the message type
+- `id` — if the client sends one, the server's reply carries the same `id` so the
+  client can correlate request and response. Messages the server originates
+  (someone joining or leaving, for example) have no `id`.
+- `d` — the payload
 
-حداکثر اندازهٔ هر فریم ورودی **۶۴ کیلوبایت** است.
+The maximum size of an inbound frame is **64 KB**.
 
-## دست‌دادن اولیه (handshake)
+## Handshake
 
-اولین فریم بعد از باز شدن سوکت **باید** `hello` باشد و حداکثر تا ۱۰ ثانیه
-بعد از اتصال ارسال شود، وگرنه سرور اتصال را می‌بندد.
+The first frame after the socket opens **must** be `hello`, and it must arrive
+within 10 seconds of connecting, or the server closes the connection.
 
 ```json
 { "t": "hello", "id": "h1", "d": {
     "client_uuid": "11111111-1111-4111-8111-111111111111",
-    "username": "دانیال",
+    "username": "Daniel",
     "password": "",
     "protocol": 1,
     "client_version": "0.1.0"
 }}
 ```
 
-`client_uuid` همان UUID ثابتی است که کلاینت هنگام نصب می‌سازد و در جای امن
-نگه می‌دارد. شناسهٔ کاربر در تمام سرورها همین است.
+`client_uuid` is the fixed UUID the client generates at install time and keeps
+somewhere safe. It is the user's identity on every server.
 
-پاسخ موفق:
+A successful reply:
 
 ```json
 { "t": "welcome", "id": "h1", "d": {
@@ -46,9 +46,9 @@
     "protocol": 1,
     "server_uuid": "…",
     "server_name": "TamizChat Server",
-    "welcome_message": "به سرور خوش آمدید!",
+    "welcome_message": "Welcome to the server!",
     "heartbeat_sec": 30,
-    "you":   { "client_uuid": "…", "username": "دانیال", "joined_at": 1760000000,
+    "you":   { "client_uuid": "…", "username": "Daniel", "joined_at": 1760000000,
                 "room_id": "", "roles": ["role-admin"], "muted": false },
     "users": [ User ],
     "rooms": [ Room ],
@@ -59,101 +59,101 @@
 }}
 ```
 
-`welcome.rooms` کل درخت روم‌ها را همراه اعضای هر روم می‌دهد، تا کلاینت بلافاصله
-بتواند رابط را بسازد بدون درخواست اضافه.
+`welcome.rooms` carries the whole room tree along with each room's members, so
+the client can build its interface immediately without an extra request.
 
-## پیام‌های کلاینت → سرور
+## Client → server messages
 
-| نوع | محتوا | توضیح |
+| Type | Payload | Notes |
 |-----|-------|-------|
-| `hello` | بالا | فقط یک‌بار، در ابتدای اتصال |
-| `ping` | — | پاسخ `pong` با همان `id` |
-| `rename` | `{"username": "نام جدید"}` | تغییر نام نمایشی |
-| `room.list` | — | پاسخ `room.list` با کل درخت روم‌ها |
-| `room.join` | `{"room_id", "password"}` | ورود به روم؛ روم قبلی خودکار ترک می‌شود |
-| `room.leave` | — | خروج از روم فعلی |
-| `room.create` | `{"name", "password", "capacity", "required_role_id"}` | نیازمند مجوز `manage_rooms` |
-| `room.update` | `{"room_id", "name"?, "password"?, "capacity"?, "position"?, "required_role_id"?}` | فقط فیلدهای موجود تغییر می‌کنند |
-| `room.delete` | `{"room_id"}` | نیازمند مجوز `manage_rooms` |
-| `chat.send` | `{"text"}` یا `{"sticker_id"}` | در روم فعلی؛ دقیقاً یکی از دو فیلد |
-| `chat.history` | `{"before_seq"?, "limit"?}` | صفحه‌بندی به عقب |
-| `chat.edit` | `{"message_id", "text"}` | فقط نویسندهٔ پیام |
-| `chat.delete` | `{"message_id"}` | نویسنده، یا مدیر برای پیام دیگران |
-| `chat.typing` | `{"typing": true}` | بدون پاسخ؛ ذخیره هم نمی‌شود |
-| `admin.kick` | `{"client_uuid", "reason"}` | نیازمند مجوز `kick` |
-| `admin.ban` | `{"client_uuid", "reason", "duration_sec"}` | `0` یعنی دائمی |
-| `admin.unban` | `{"client_uuid"}` | روی کاربر آفلاین هم کار می‌کند |
-| `admin.mute` | `{"client_uuid", "reason", "duration_sec"}` | بدون قطع اتصال |
+| `hello` | above | Once only, at the start of the connection |
+| `ping` | — | Replied with `pong` carrying the same `id` |
+| `rename` | `{"username": "new name"}` | Change the display name |
+| `room.list` | — | Replied with `room.list` and the whole room tree |
+| `room.join` | `{"room_id", "password"}` | Join a room; the previous one is left automatically |
+| `room.leave` | — | Leave the current room |
+| `room.create` | `{"name", "password", "capacity", "required_role_id"}` | Requires the `manage_rooms` permission |
+| `room.update` | `{"room_id", "name"?, "password"?, "capacity"?, "position"?, "required_role_id"?}` | Only the fields present are changed |
+| `room.delete` | `{"room_id"}` | Requires the `manage_rooms` permission |
+| `chat.send` | `{"text"}` or `{"sticker_id"}` | In the current room; exactly one of the two fields |
+| `chat.history` | `{"before_seq"?, "limit"?}` | Backwards pagination |
+| `chat.edit` | `{"message_id", "text"}` | Author only |
+| `chat.delete` | `{"message_id"}` | The author, or a moderator for someone else's message |
+| `chat.typing` | `{"typing": true}` | No reply; not stored either |
+| `admin.kick` | `{"client_uuid", "reason"}` | Requires the `kick` permission |
+| `admin.ban` | `{"client_uuid", "reason", "duration_sec"}` | `0` means permanent |
+| `admin.unban` | `{"client_uuid"}` | Works on offline users too |
+| `admin.mute` | `{"client_uuid", "reason", "duration_sec"}` | Does not close the connection |
 | `admin.unmute` | `{"client_uuid"}` | |
-| `admin.move` | `{"client_uuid", "room_id"}` | `room_id` خالی یعنی خروج از روم |
-| `admin.sanctions` | — | فهرست بن‌ها و میوت‌های فعال |
-| `admin.role.list` | — | برای همه آزاد است (نمایش نام و رنگ) |
-| `admin.role.create` | RoleSpec | نیازمند مجوز `manage_roles` |
-| `admin.role.update` | RoleSpec با `role_id` | |
-| `admin.role.delete` | `{"role_id"}` | رول‌های داخلی حذف نمی‌شوند |
+| `admin.move` | `{"client_uuid", "room_id"}` | An empty `room_id` means "out of the room" |
+| `admin.sanctions` | — | The list of active bans and mutes |
+| `admin.role.list` | — | Open to everyone (to show names and colours) |
+| `admin.role.create` | RoleSpec | Requires the `manage_roles` permission |
+| `admin.role.update` | RoleSpec with a `role_id` | |
+| `admin.role.delete` | `{"role_id"}` | Built-in roles cannot be deleted |
 | `admin.role.grant` | `{"client_uuid", "role_id"}` | |
 | `admin.role.revoke` | `{"client_uuid", "role_id"}` | |
-| `file.upload_request` | `{"name", "size"}` | اجازهٔ آپلود، **پیش از** ارسال بایت‌ها |
-| `file.download_token` | `{"file_id"}` | لینک کوتاه‌عمر دانلود |
-| `media.token` | — | اعتبارنامهٔ اتصال به LiveKit برای روم فعلی |
-| `media.set_state` | `{"mic", "cam", "screen"}` | اعلام اینکه چه چیزی روشن است |
-| `paint.begin` | `{"tool", "color", "width", "points"}` | شروع یک خط؛ پاسخ شامل `stroke_id` |
-| `paint.append` | `{"stroke_id", "points"}` | افزودن نقطه به خطی که در حال کشیده‌شدن است |
-| `paint.end` | `{"stroke_id"}` | پایان خط |
-| `paint.undo` | — | حذف آخرین خط خودتان |
-| `paint.clear` | `{"scope": "mine"\|"all"}` | پاک‌کردن؛ `all` نیازمند مجوز `moderate_chat` |
-| `paint.state` | — | کل تخته، برای تازه‌واردها |
-| `bot.list` | — | فهرست بات‌ها و وضعیت فعلی‌شان (برای همه آزاد) |
-| `bot.control` | `{"bot_id", "action", "track_index"?}` | نیازمند مجوز `control_bots` |
-| `bot.move` | `{"bot_id", "room_id"}` | `room_id` خالی یعنی خروج از روم |
+| `file.upload_request` | `{"name", "size"}` | Upload permission, **before** any bytes are sent |
+| `file.download_token` | `{"file_id"}` | A short-lived download link |
+| `media.token` | — | LiveKit credentials for the current room |
+| `media.set_state` | `{"mic", "cam", "screen"}` | Announce what is switched on |
+| `paint.begin` | `{"tool", "color", "width", "points"}` | Start a stroke; the reply carries `stroke_id` |
+| `paint.append` | `{"stroke_id", "points"}` | Add points to a stroke being drawn |
+| `paint.end` | `{"stroke_id"}` | End of the stroke |
+| `paint.undo` | — | Remove your own last stroke |
+| `paint.clear` | `{"scope": "mine"\|"all"}` | Clear; `all` requires the `moderate_chat` permission |
+| `paint.state` | — | The whole board, for newcomers |
+| `bot.list` | — | The bots and their current state (open to everyone) |
+| `bot.control` | `{"bot_id", "action", "track_index"?}` | Requires the `control_bots` permission |
+| `bot.move` | `{"bot_id", "room_id"}` | An empty `room_id` means "out of the room" |
 
-`capacity: 0` هنگام ساخت یعنی «از پیش‌فرض سرور استفاده کن».
+`capacity: 0` on creation means "use the server default".
 
-## پیام‌های سرور → کلاینت
+## Server → client messages
 
-| نوع | محتوا |
+| Type | Payload |
 |-----|-------|
-| `welcome` | بالا |
+| `welcome` | above |
 | `pong` | — |
 | `error` | `{"code": "...", "message": "..."}` |
 | `user.joined` | `{"client_uuid", "username", "joined_at", "room_id"}` |
 | `user.left` | `{"client_uuid", "username", "reason"}` |
-| `user.updated` | همان User — فقط برای تغییر نام |
+| `user.updated` | A User — for a name change only |
 | `room.list` | `{"rooms": [Room]}` |
-| `room.joined` | `{"room": Room}` — فقط برای خودِ درخواست‌دهنده |
-| `room.left` | `{"room_id", "reason"}` — فقط برای خودِ کاربر |
-| `room.created` / `room.updated` | یک Room |
+| `room.joined` | `{"room": Room}` — only to the requester |
+| `room.left` | `{"room_id", "reason"}` — only to that user |
+| `room.created` / `room.updated` | A Room |
 | `room.deleted` | `{"room_id"}` |
 | `room.member_joined` / `room.member_left` | `{"room_id", "user", "reason"}` |
-| `room.purged` | `{"room_id"}` — محتوای موقت روم پاک شد |
-| `chat.message` | یک Message — هم پاسخ `chat.send` و هم پخش به بقیهٔ اعضا |
+| `room.purged` | `{"room_id"}` — the room's temporary content was erased |
+| `chat.message` | A Message — both the reply to `chat.send` and the broadcast to the other members |
 | `chat.history` | `{"room_id", "messages": [Message], "has_more"}` |
-| `chat.updated` | Message ویرایش‌شده |
+| `chat.updated` | The edited Message |
 | `chat.deleted` | `{"room_id", "message_id", "deleted_by"?}` |
 | `chat.typing` | `{"room_id", "client_uuid", "username", "typing"}` |
 | `user.kicked` / `user.banned` | `{"client_uuid", "username", "by_uuid", "by_username", "reason", "expires_at"}` |
-| `user.muted` / `user.unmuted` | همان قالب بالا |
-| `user.roles_changed` | `{"client_uuid", "roles", "permissions"}` — فقط برای خودِ کاربر |
+| `user.muted` / `user.unmuted` | Same shape as above |
+| `user.roles_changed` | `{"client_uuid", "roles", "permissions"}` — only to that user |
 | `admin.sanctions` | `{"sanctions": [Sanction]}` |
-| `admin.role.list` | آرایه‌ای از Role |
-| `admin.role` | یک Role، بعد از ساخت یا ویرایش |
+| `admin.role.list` | An array of Role |
+| `admin.role` | A Role, after creation or an edit |
 | `admin.role.deleted` | `{"role_id"}` |
-| `admin.ok` | تأیید انجام یک اکشن مدیریتی |
+| `admin.ok` | Acknowledgement of a moderation action |
 | `file.upload_ticket` | `{"upload_id", "url", "token", "expires_at", "max_size"}` |
 | `file.download` | `{"file_id", "url", "thumb_url", "expires_at"}` |
 | `media.token` | `{"url", "token", "room", "identity", "expires_at", "can_speak", "can_publish_video", "can_share_screen"}` |
 | `media.state` | `{"client_uuid", "room_id", "state": {"mic", "cam", "screen"}}` |
-| `paint.begin` | یک Stroke |
+| `paint.begin` | A Stroke |
 | `paint.append` | `{"stroke_id", "points"}` |
 | `paint.end` | `{"stroke_id"}` |
 | `paint.undo` | `{"stroke_id", "room_id"}` |
 | `paint.clear` | `{"room_id", "scope", "by"}` |
 | `paint.state` | `{"room_id", "strokes": [Stroke], "max_strokes"}` |
 | `bot.list` | `{"bots": [Bot]}` |
-| `bot.state` | یک Bot — هر بار که وضعیت بات عوض شود |
-| `server.notice` | `{"text", "from"}` — اعلان از سمت اپراتور سرور |
+| `bot.state` | A Bot — every time the bot's state changes |
+| `server.notice` | `{"text", "from"}` — a notice from the server operator |
 
-قالب `Room`:
+The `Room` shape:
 
 ```json
 { "id": "…", "name": "…", "has_password": false, "capacity": 25,
@@ -161,268 +161,274 @@
   "required_role_id": "" }
 ```
 
-رمز روم هرگز برای کلاینت فرستاده نمی‌شود؛ فقط `has_password`.
+The room password is never sent to a client; only `has_password`.
 
-قالب `Message`:
+The `Message` shape:
 
 ```json
 { "id": "…", "seq": 12, "room_id": "…",
   "author": User, "kind": "text",
-  "text": "سلام", "sticker_id": "",
+  "text": "hello", "sticker_id": "",
   "created_at": 1786400000, "edited_at": 0 }
 ```
 
-`kind` یا `text` است یا `sticker`. `seq` شمارندهٔ ترتیب داخل همان روم است و
-فقط تا وقتی روم زنده است معنا دارد — برای صفحه‌بندی با `before_seq` از آن
-استفاده کنید. برای دریافت پیام‌های قدیمی‌تر، `seq` قدیمی‌ترین پیامی که دارید
-را در `before_seq` بفرستید؛ `has_more` می‌گوید آیا باز هم چیزی مانده.
+`kind` is either `text` or `sticker`. `seq` is an ordering counter within that
+one room and only means anything while the room is alive — use it for pagination
+via `before_seq`. To fetch older messages, send the `seq` of the oldest message
+you hold in `before_seq`; `has_more` tells you whether anything is left.
 
-نکتهٔ مهم دربارهٔ چت:
+Important notes about chat:
 
-- محتوای استیکر سمت کلاینت است؛ سرور فقط `sticker_id` را رد و بدل می‌کند
-  (الگوی مجاز: `[A-Za-z0-9._:-]` تا ۶۴ کاراکتر). بستهٔ استیکر میزبانی‌شده
-  روی سرور به فازهای بعد موکول شده است.
-- ویرایش فقط برای نویسنده است، حتی برای مدیر. مدیر می‌تواند پیام دیگران را
-  **حذف** کند ولی نمی‌تواند حرف در دهان کسی بگذارد.
-- پیام حذف‌شده به‌کلی از حافظه می‌رود (بدون tombstone).
-- ارسال پیام محدود به نرخ است (`chat.rate_per_minute` و `chat.rate_burst`).
-  پیامی که سرور رد می‌کند از سهمیهٔ نرخ کم نمی‌شود.
-- `chat.typing` نه ذخیره می‌شود و نه پاسخ دارد؛ اگر گم شود، تایمر خود کلاینت
-  نشانگر را پاک می‌کند.
+- Sticker artwork lives on the client; the server only passes a `sticker_id`
+  around (allowed pattern: `[A-Za-z0-9._:-]`, up to 64 characters). A
+  server-hosted sticker pack is deferred to a later phase.
+- Editing is author-only, even for a moderator. A moderator can **delete**
+  someone else's message but cannot put words in their mouth.
+- A deleted message leaves memory entirely (no tombstone).
+- Sending is rate limited (`chat.rate_per_minute` and `chat.rate_burst`). A
+  message the server rejects does not spend rate quota.
+- `chat.typing` is neither stored nor replied to; if it goes missing, the
+  client's own timer clears the indicator.
 
-## چرا رویدادهای عضویت روم سرورگسترند
+## Why room membership events are server-wide
 
-`room.member_joined` و `room.member_left` برای **همهٔ** کاربران سرور فرستاده
-می‌شوند، نه فقط اعضای همان روم — چون کلاینت مثل TeamSpeak کل درخت روم‌ها و
-افراد داخل هرکدام را نشان می‌دهد. به همین دلیل هنگام جابه‌جایی بین روم‌ها
-`user.updated` جداگانه‌ای فرستاده نمی‌شود: یک رویداد به‌ازای هر جابه‌جایی، که
-خودش شناسهٔ روم را حمل می‌کند. `user.updated` فقط برای تغییر نام است.
+`room.member_joined` and `room.member_left` are sent to **every** user on the
+server, not just that room's members — because the client, like TeamSpeak, shows
+the whole room tree and who is inside each one. That is also why no separate
+`user.updated` is sent when someone moves between rooms: one event per move, and
+it carries the room ID itself. `user.updated` is for name changes only.
 
-## چرخهٔ عمر محتوای روم
+## Room content lifecycle
 
-تعریف روم (نام، رمز، ظرفیت) دائمی است و در دیتابیس می‌ماند. اما هرچه داخل روم
-اتفاق می‌افتد — پیام، فایل، نقاشی — موقتی است: وقتی آخرین نفر بیرون می‌رود،
-یک مهلت کوتاه (`rooms.purge_grace_sec`، پیش‌فرض ۳۰ ثانیه) شمرده می‌شود و اگر
-کسی برنگشت، همه‌چیز پاک و `room.purged` منتشر می‌شود. مهلت برای این است که
-یک قطعی لحظه‌ای یا بیرون‌رفتن و برگشتن فوری، گفتگوی فعال را از بین نبرد.
+A room's definition (name, password, capacity) is permanent and lives in the
+database. But everything that happens inside a room — messages, files, drawings —
+is temporary: when the last person leaves, a short grace period
+(`rooms.purge_grace_sec`, 30 seconds by default) is counted, and if nobody comes
+back, everything is erased and `room.purged` is broadcast. The grace period
+exists so a momentary drop, or stepping out and straight back in, does not
+destroy an active conversation.
 
-## کدهای خطا
+## Error codes
 
-کدها شناسه‌های پایدار هستند؛ کلاینت باید بر اساس `code` متن خودش را نشان دهد
-و به `message` (که فارسی و برای دیباگ است) تکیه نکند.
+The codes are stable identifiers; a client should show its own text based on
+`code` and not rely on `message` (which is for debugging).
 
-| کد | معنی |
+| Code | Meaning |
 |----|------|
-| `bad_request` | قالب یا محتوای پیام نامعتبر |
-| `handshake_required` | اولین پیام hello نبود |
-| `handshake_timeout` | hello در مهلت مقرر نرسید |
-| `unsupported_protocol` | نسخهٔ پروتکل ناسازگار |
-| `invalid_client_uuid` | شناسهٔ کلاینت معتبر نیست |
-| `invalid_username` | نام کاربری قابل قبول نیست |
-| `username_taken` | نام کاربری همین حالا در سرور استفاده می‌شود |
-| `bad_password` | رمز سرور نادرست |
-| `server_full` | ظرفیت سرور تکمیل |
-| `internal_error` | خطای داخلی سرور |
-| `room_not_found` | چنین رومی وجود ندارد |
-| `room_name_taken` | نام روم تکراری است |
-| `room_bad_password` | رمز روم نادرست |
-| `room_full` | ظرفیت روم تکمیل |
-| `room_limit_reached` | به سقف تعداد روم‌های سرور رسیده‌اید |
-| `room_invalid_name` | نام یا ظرفیت روم قابل قبول نیست (`message` قابل نمایش است) |
-| `not_in_a_room` | عملیات نیازمند حضور در یک روم است |
-| `forbidden` | مجوز لازم را ندارید |
-| `banned` | از سرور بن شده‌اید (`message` دلیل را دارد) |
-| `muted` | میوت هستید و نمی‌توانید پیام بفرستید |
-| `outranked` | هدف هم‌رتبه یا بالاتر از شماست |
-| `user_not_found` | کاربر آنلاین نیست یا چنین محدودیتی ثبت نشده |
-| `role_not_found` / `role_name_taken` / `role_protected` | خطاهای رول |
-| `room_role_required` | برای ورود به روم، رول لازم را ندارید |
-| `invalid_input` | ورودی اکشن مدیریتی معتبر نیست |
-| `uploads_disabled` | ارسال فایل در این سرور خاموش است |
-| `file_too_large` | فایل بزرگ‌تر از سقف مجاز است |
-| `room_quota_exceeded` | سهمیهٔ فایل روم پر است |
-| `file_not_found` | فایل دیگر وجود ندارد (روم پاک شده یا در روم دیگری است) |
-| `file_invalid` | نام یا محتوای فایل معتبر نیست |
-| `media_disabled` | ویس و ویدیو روی این سرور فعال نیست |
-| `paint_disabled` | تختهٔ نقاشی روی این سرور فعال نیست |
-| `paint_board_full` | تخته پر شده؛ باید پاک شود |
-| `paint_stroke_not_found` | چنین خطی روی تخته نیست یا مال شما نیست |
-| `paint_invalid` | ابزار یا رنگ نامعتبر |
-| `bot_not_found` | چنین باتی وجود ندارد |
-| `bot_disabled` | این بات غیرفعال است |
-| `bot_queue_empty` | فولدر موسیقی بات خالی است |
-| `bot_bad_action` | دستور بات شناخته نمی‌شود |
-| `message_invalid` | متن یا استیکر قابل قبول نیست (`message` قابل نمایش است) |
-| `message_not_found` | پیام دیگر در حافظهٔ روم نیست |
-| `stickers_disabled` | ارسال استیکر در این سرور خاموش است |
-| `rate_limited` | سریع‌تر از حد مجاز پیام فرستاده‌اید |
+| `bad_request` | The message format or payload is invalid |
+| `handshake_required` | The first message was not hello |
+| `handshake_timeout` | hello did not arrive in time |
+| `unsupported_protocol` | Incompatible protocol version |
+| `invalid_client_uuid` | The client ID is not valid |
+| `invalid_username` | The username is not acceptable |
+| `username_taken` | That username is currently in use on the server |
+| `bad_password` | Wrong server password |
+| `server_full` | The server is full |
+| `internal_error` | Internal server error |
+| `room_not_found` | No such room |
+| `room_name_taken` | Duplicate room name |
+| `room_bad_password` | Wrong room password |
+| `room_full` | The room is full |
+| `room_limit_reached` | You have reached the server's room limit |
+| `room_invalid_name` | The room name or capacity is not acceptable (`message` is displayable) |
+| `not_in_a_room` | The operation requires being in a room |
+| `forbidden` | You lack the required permission |
+| `banned` | You are banned from the server (`message` holds the reason) |
+| `muted` | You are muted and cannot send messages |
+| `outranked` | The target ranks equal to or above you |
+| `user_not_found` | The user is not online, or no such sanction is recorded |
+| `role_not_found` / `role_name_taken` / `role_protected` | Role errors |
+| `room_role_required` | You lack the role required to join the room |
+| `invalid_input` | The moderation action's input is not valid |
+| `uploads_disabled` | File uploads are off on this server |
+| `file_too_large` | The file exceeds the size limit |
+| `room_quota_exceeded` | The room's file quota is full |
+| `file_not_found` | The file no longer exists (the room was purged, or it belongs to another room) |
+| `file_invalid` | The file name or content is not valid |
+| `media_disabled` | Voice and video are not enabled on this server |
+| `paint_disabled` | The paint board is not enabled on this server |
+| `paint_board_full` | The board is full; it must be cleared |
+| `paint_stroke_not_found` | No such stroke on the board, or it is not yours |
+| `paint_invalid` | Invalid tool or colour |
+| `bot_not_found` | No such bot |
+| `bot_disabled` | That bot is disabled |
+| `bot_queue_empty` | The bot's music folder is empty |
+| `bot_bad_action` | The bot command is not recognised |
+| `message_invalid` | The text or sticker is not acceptable (`message` is displayable) |
+| `message_not_found` | The message is no longer in the room's memory |
+| `stickers_disabled` | Stickers are off on this server |
+| `rate_limited` | You sent messages faster than allowed |
 
-## دلایل قطع اتصال (`reason`)
+## Disconnect reasons (`reason`)
 
 `client_left` · `replaced_by_new_connection` · `timeout` · `server_shutdown` · `slow_consumer`
 
-## دلایل خروج از روم (`reason`)
+## Room-leave reasons (`reason`)
 
 `left` · `switched_room` · `disconnected` · `room_deleted`
 
-## قواعد نام کاربری
+## Username rules
 
-- طول بین `username_min` و `username_max` (پیش‌فرض ۳ تا ۲۴ کاراکتر)
-- فاصله‌های ابتدا/انتها حذف و فاصله‌های داخلی به یک فاصله تبدیل می‌شوند
-- کاراکتر کنترلی و کاراکترهای جهت‌دهی متن (LRM/RLM/LRO/RLO/…) مجاز نیستند —
-  چون با آن‌ها می‌شود نام یک کاربر دیگر را جعل کرد
-- یکتایی **بدون حساسیت به بزرگی و کوچکی** و فقط بین کاربران آنلاین بررسی می‌شود
+- Length between `username_min` and `username_max` (3 to 24 characters by default)
+- Leading/trailing whitespace is stripped and internal runs collapse to one space
+- Control characters and bidirectional text characters (LRM/RLM/LRO/RLO/…) are
+  not allowed — they can be used to impersonate another user's name
+- Uniqueness is checked **case-insensitively** and only among online users
 
-## اتصال دوباره
+## Reconnecting
 
-اگر کلاینتی با `client_uuid` تکراری وصل شود، سرور اتصال قبلی را با دلیل
-`replaced_by_new_connection` می‌بندد و نشست جدید جای آن را می‌گیرد. برای بقیهٔ
-کاربران هیچ رویداد خروج و ورودی منتشر نمی‌شود؛ یعنی قطعی لحظه‌ای کاربر برای
-دیگران دیده نمی‌شود.
+If a client connects with a `client_uuid` that is already in use, the server
+closes the previous connection with the reason `replaced_by_new_connection` and
+the new session takes its place. No leave or join event is published to anyone
+else, so a momentary drop is invisible to other users.
 
-## ضربان (heartbeat)
+## Heartbeat
 
-سرور هر `heartbeat_sec` ثانیه یک ping در سطح WebSocket می‌فرستد. کتابخانه‌های
-استاندارد خودشان pong را جواب می‌دهند. کلاینتی که جواب ندهد با دلیل `timeout`
-قطع می‌شود. پیام `ping` سطح اپلیکیشن هم برای اندازه‌گیری تأخیر در دسترس است.
+The server sends a WebSocket-level ping every `heartbeat_sec` seconds. Standard
+libraries answer the pong themselves. A client that does not answer is
+disconnected with the reason `timeout`. The application-level `ping` message is
+also available for measuring latency.
 
 
-## رول‌ها و مجوزها
+## Roles and permissions
 
-هر رول یک بیت‌مسک مجوز، یک **رتبه** و یک رنگ دارد. مجوزهای مؤثر هر کاربر
-اجتماع مجوزهای همهٔ رول‌های اوست، به‌علاوهٔ رول‌هایی که `is_default` دارند و
-همه به‌صورت ضمنی آن‌ها را دارند.
+Each role has a permission bitmask, a **priority** and a colour. A user's
+effective permissions are the union of all their roles, plus any role marked
+`is_default`, which everyone holds implicitly.
 
-قالب `Role`:
+The `Role` shape:
 
 ```json
-{ "id": "role-admin", "name": "ادمین",
+{ "id": "role-admin", "name": "Admin",
   "permissions": ["kick", "ban", "..."],
   "priority": 100, "color": "#e74c3c", "is_default": false }
 ```
 
-مجوزها به‌جای عدد، کلید متنی پایدار هستند تا کلاینت قدیمی‌تر هم بتواند
-آن‌هایی را که می‌شناسد بفهمد:
+Permissions are stable text keys rather than numbers, so an older client can
+still understand the ones it knows:
 
 `send_messages` · `upload_files` · `moderate_chat` · `manage_rooms` ·
 `join_locked_rooms` · `bypass_room_password` · `kick` · `ban` · `mute` ·
 `move_users` · `manage_roles` · `control_bots`
 
-`welcome` هم فهرست کامل رول‌های سرور (`roles`) و مجوزهای خودِ شما
-(`permissions`) را می‌دهد تا کلاینت بتواند دکمه‌هایی را که به کارتان نمی‌آید
-پنهان کند. سرور در هر درخواست دوباره بررسی می‌کند؛ پنهان‌کردن دکمه امنیت
-نیست، فقط ادب رابط کاربری است.
+`welcome` also carries the server's full role list (`roles`) and your own
+permissions (`permissions`) so the client can hide buttons that are of no use to
+you. The server re-checks on every request; hiding a button is not security, only
+interface manners.
 
-### قاعدهٔ رتبه
+### The priority rule
 
-یک مدیر فقط می‌تواند روی کسی اقدام کند که رتبه‌اش **اکیداً کمتر** باشد. اگر
-دو ادمین هم‌رتبه باشند، هیچ‌کدام نمی‌تواند دیگری را کیک یا بن یا میوت کند.
-به همین ترتیب:
+A moderator may only act on someone whose priority is **strictly lower**. If two
+admins share a priority, neither can kick, ban or mute the other. In the same
+spirit:
 
-- نمی‌توانید رولی هم‌رتبه یا بالاتر از خودتان بسازید یا بدهید
-- نمی‌توانید مجوزی به یک رول بدهید که خودتان ندارید
+- You cannot create or grant a role at or above your own priority
+- You cannot grant a role a permission you do not hold yourself
 
-این دو قانون جلوی ارتقای خودسرانه را می‌گیرند.
+Those two rules close off arbitrary self-promotion.
 
-### ورود به روم
+### Joining a room
 
-اگر روم `required_role_id` داشته باشد، فقط دارندگان آن رول (یا کسی که
-`join_locked_rooms` دارد) می‌توانند وارد شوند. دارندهٔ
-`bypass_room_password` هم بدون دانستن رمز روم وارد می‌شود.
+If a room has a `required_role_id`, only holders of that role (or of
+`join_locked_rooms`) can enter. A holder of `bypass_room_password` gets in
+without knowing the room password.
 
-`admin.move` هیچ‌کدام از این‌ها را رعایت نمی‌کند — نه رمز، نه رول، نه ظرفیت.
-جابه‌جایی توسط مدیر یک تصمیم صریح است که خودش از کنترل مجوز عبور کرده.
+`admin.move` respects none of this — not the password, not the role, not the
+capacity. A moderator move is an explicit decision that already passed a
+permission check.
 
-### بن و میوت
+### Bans and mutes
 
-- بن مانع **اتصال** می‌شود؛ در handshake بررسی می‌شود و کد `banned` برمی‌گردد.
-- میوت فقط جلوی ارسال پیام را می‌گیرد و اتصال را قطع نمی‌کند. با اتصال دوباره
-  هم برطرف نمی‌شود.
-- هر دو می‌توانند موقت باشند (`duration_sec`) یا دائمی (`0`).
-- اولین ادمین سرور از پنل کامندلاین ساخته می‌شود، نه از داخل اپ.
+- A ban blocks the **connection**; it is checked during the handshake and returns
+  the `banned` code.
+- A mute only stops messages from being sent and does not close the connection.
+  Reconnecting does not clear it.
+- Both can be temporary (`duration_sec`) or permanent (`0`).
+- The server's first admin is created from the command-line panel, not from
+  inside the app.
 
-### بستن اتصال از سمت سرور
+### Server-initiated close
 
-وقتی سرور اتصالی را می‌بندد (کیک، بن، خاموشی)، دلیل **قبلاً** به‌صورت یک فریم
-معمولی فرستاده شده (`user.kicked`، `user.banned`، یا `error`). خود بستن سوکت
-منتظر پاسخ کلاینت نمی‌ماند، پس ممکن است close frame استانداردی نبینید؛ به
-آخرین فریم دریافتی تکیه کنید.
+When the server closes a connection (kick, ban, shutdown), the reason has
+**already** been sent as an ordinary frame (`user.kicked`, `user.banned` or
+`error`). The socket close itself does not wait for the client to answer, so you
+may not see a standard close frame; rely on the last frame you received.
 
 
-## ارسال فایل و عکس
+## Files and images
 
-فایل‌ها از HTTP رد و بدل می‌شوند، نه از WebSocket — سوکت سقف ۶۴ کیلوبایتی برای
-هر فریم دارد و برای کنترل است، نه برای مگابایت‌ها داده. ولی **مجوزش** از
-WebSocket گرفته می‌شود، تا سرور بتواند پیش از دریافت حتی یک بایت، دسترسی و
-سهمیه و حجم را بررسی کند.
+Files travel over HTTP, not the WebSocket — the socket has a 64 KB per-frame
+limit and is meant for control, not megabytes of data. But the **permission**
+comes from the WebSocket, so the server can check access, quota and size before
+receiving a single byte.
 
-### مسیر آپلود
+### The upload path
 
-۱. کلاینت `file.upload_request` می‌فرستد با نام و حجم فایل.
-۲. سرور بررسی می‌کند: آپلود فعال است؟ مجوز `upload_files` را دارد؟ داخل روم
-   است؟ حجم از سقف کمتر است؟ سهمیهٔ روم جا دارد؟ اگر همه درست بود،
-   `file.upload_ticket` برمی‌گرداند.
-۳. کلاینت بایت‌های خام را با `POST` به `url` تیکت می‌فرستد (بدنهٔ خام، نه
-   multipart). توکن هم در query است و هم به‌صورت `Authorization: Bearer`
-   پذیرفته می‌شود.
-۴. سرور فایل را ذخیره می‌کند و **خودش** یک پیام از نوع `file` در روم منتشر
-   می‌کند. پس همه — از جمله خود فرستنده — یک `chat.message` می‌گیرند.
+1. The client sends `file.upload_request` with the file's name and size.
+2. The server checks: are uploads enabled? does the user hold `upload_files`? are
+   they in a room? is the size under the limit? does the room's quota have room?
+   If everything passes, it returns a `file.upload_ticket`.
+3. The client `POST`s the raw bytes to the ticket's `url` (a raw body, not
+   multipart). The token is accepted both in the query string and as
+   `Authorization: Bearer`.
+4. The server stores the file and posts a `file` message into the room **itself**.
+   So everyone — the sender included — receives a `chat.message`.
 
-هر تیکت **یک‌بارمصرف** است و ۲ دقیقه اعتبار دارد.
+Each ticket is **single-use** and valid for 2 minutes.
 
-### مسیر دانلود
+### The download path
 
-`file.download_token` با شناسهٔ فایل بفرستید تا یک لینک کوتاه‌عمر بگیرید
-(پیش‌فرض ۵ دقیقه، `uploads.token_ttl_sec`). لینک فقط برای رومی کار می‌کند که
-**همین حالا** داخلش هستید؛ شناسهٔ فایلی که از روم دیگری درز کند قابل استفاده
-نیست.
+Send `file.download_token` with the file ID to get a short-lived link (5 minutes
+by default, `uploads.token_ttl_sec`). The link only works for the room you are in
+**right now**; a file ID leaked from another room is unusable.
 
-برای عکس‌ها `thumb_url` هم می‌آید که همان لینک با `&thumb=1` است.
+For images a `thumb_url` comes along too — the same link with `&thumb=1`.
 
-قالب `Attachment`:
+The `Attachment` shape:
 
 ```json
-{ "id": "…", "name": "گزارش.pdf", "size": 12345,
+{ "id": "…", "name": "report.pdf", "size": 12345,
   "mime": "application/pdf", "kind": "file",
   "width": 0, "height": 0, "has_thumb": false }
 ```
 
-`kind` یا `image` است یا `file`.
+`kind` is either `image` or `file`.
 
-### نکته‌های امنیتی که کلاینت باید بداند
+### Security notes the client should know
 
-- `mime` را سرور از **خود بایت‌ها** تشخیص می‌دهد، نه از پسوند یا ادعای کلاینت.
-  فایلی به نام `photo.png` که متن ساده باشد، `kind: "file"` می‌گیرد.
-- دانلودها همیشه با `Content-Disposition: attachment` و `X-Content-Type-Options:
-  nosniff` سرو می‌شوند تا فایل آپلودشده نتواند روی دامنهٔ سرور اجرا شود.
-  فقط تصویر بندانگشتی `inline` است و همیشه JPEG.
-- نام فایل فقط برای نمایش است؛ فایل روی دیسک با یک شناسهٔ تصادفی ذخیره می‌شود
-  و اجزای مسیر (`../`) از نام حذف می‌شوند.
+- The server derives `mime` from the **bytes themselves**, not from the extension
+  or the client's claim. A file called `photo.png` that is really plain text gets
+  `kind: "file"`.
+- Downloads are always served with `Content-Disposition: attachment` and
+  `X-Content-Type-Options: nosniff`, so an uploaded file cannot execute on the
+  server's domain. Only the thumbnail is `inline`, and it is always JPEG.
+- The file name is for display only; on disk the file is stored under a random ID
+  and path components (`../`) are stripped from the name.
 
-### چرخهٔ عمر
+### Lifecycle
 
-فایل‌ها هم مثل چت موقتی‌اند:
+Files are as temporary as chat:
 
-- با خالی‌شدن روم (پس از مهلت پاک‌سازی) بایت‌ها از **دیسک حذف می‌شوند**، نه
-  اینکه فقط فراموش شوند.
-- با حذف روم هم همین اتفاق می‌افتد.
-- هنگام بالا آمدن سرور، کل پوشهٔ آپلود پاک می‌شود؛ هیچ فایلی از ری‌استارت
-  جان سالم به در نمی‌برد، چون هر فایل به یک روم زنده وابسته است.
+- When a room empties (after the purge grace period) the bytes are **deleted from
+  disk**, not merely forgotten.
+- The same happens when a room is deleted.
+- At server startup the whole upload folder is cleared; no file survives a
+  restart, because every file belongs to a live room.
 
 
-## ویس، ویدیو و اشتراک صفحه
+## Voice, video and screen sharing
 
-مدیا از **LiveKit** رد و بدل می‌شود که یک سرویس جداست. بک‌اند TamizChat هیچ
-بسته‌ای از صدا و تصویر را لمس نمی‌کند؛ فقط دو کار می‌کند:
+Media travels through **LiveKit**, which is a separate service. The TamizChat
+backend touches no audio or video packet; it only does two things:
 
-۱. **توکن امضا می‌کند** که کلاینت با آن وارد روم LiveKit می‌شود.
-۲. **مدیریت را اعمال می‌کند** — کسی که کیک یا میوت شده باید میکروفونش را هم از
-   دست بدهد، نه فقط چتش را.
+1. **Signs a token** the client uses to enter the LiveKit room.
+2. **Applies moderation** — someone kicked or muted should lose their microphone
+   too, not just their chat.
 
-### گرفتن اعتبارنامه
+### Getting credentials
 
-`media.token` بفرستید (بدون محتوا). پاسخ برای رومی است که **همین حالا** داخلش
-هستید:
+Send `media.token` (with no payload). The reply is for the room you are in
+**right now**:
 
 ```json
 { "url": "ws://127.0.0.1:7880", "token": "<JWT>",
@@ -431,82 +437,84 @@ WebSocket گرفته می‌شود، تا سرور بتواند پیش از در
   "can_speak": true, "can_publish_video": true, "can_share_screen": false }
 ```
 
-- نام روم LiveKit دقیقاً همان `room_id` تمیزچت است.
-- هویت شرکت‌کننده همان `client_uuid` است، پس سرور می‌تواند دقیقاً او را هدف
-  بگیرد.
-- توکن ۱۵ دقیقه اعتبار دارد و فقط لحظهٔ اتصال لازم است. اگر روم عوض کردید،
-  توکن جدید بگیرید.
+- The LiveKit room name is exactly the TamizChat `room_id`.
+- The participant identity is the `client_uuid`, so the server can target that
+  person precisely.
+- The token is valid for 15 minutes and is only needed at connect time. If you
+  change rooms, get a new one.
 
-### مجوزها واقعاً اعمال می‌شوند
+### Permissions are genuinely enforced
 
-پرچم‌های `can_*` فقط برای این‌اند که کلاینت دکمهٔ بی‌فایده نشان ندهد. خودِ توکن
-هم همان محدودیت‌ها را دارد (`canPublishSources` در گرنت LiveKit)، پس کلاینتی که
-پرچم را نادیده بگیرد از سمت **LiveKit** رد می‌شود، نه از سمت رابط کاربری.
+The `can_*` flags exist so the client does not show a useless button. The token
+itself carries the same restrictions (`canPublishSources` in the LiveKit grant),
+so a client that ignores the flags is rejected by **LiveKit**, not by the user
+interface.
 
-سه مجوز تازه: `speak` · `publish_video` · `share_screen`
+Three permissions apply here: `speak` · `publish_video` · `share_screen`
 
-کسی که هیچ‌کدام را ندارد باز هم توکن می‌گیرد — می‌تواند **بشنود و ببیند**، فقط
-منتشر نمی‌کند.
+Someone with none of them still gets a token — they can **listen and watch**, they
+just cannot publish.
 
-### اعمال مدیریت روی مدیا
+### Moderation applied to media
 
-| اتفاق | کاری که سرور با LiveKit می‌کند |
+| Event | What the server does with LiveKit |
 |-------|-------------------------------|
-| میوت شدن | `UpdateParticipant` با `canPublish=false` (تِرَک‌های فعلی قطع می‌شوند) |
-| رفع میوت / تغییر رول | `UpdateParticipant` با مجوزهای جدید |
-| کیک یا بن | `RemoveParticipant` |
-| خروج از روم، جابه‌جایی، یا قطع اتصال | `RemoveParticipant` |
-| حذف روم | `DeleteRoom` |
+| Muted | `UpdateParticipant` with `canPublish=false` (current tracks are cut) |
+| Unmuted / role changed | `UpdateParticipant` with the new permissions |
+| Kicked or banned | `RemoveParticipant` |
+| Leaving a room, moving, or disconnecting | `RemoveParticipant` |
+| Room deleted | `DeleteRoom` |
 
-اگر LiveKit در دسترس نباشد، این تماس‌ها فقط لاگ می‌شوند و چت به کار خودش ادامه
-می‌دهد. **مدیا هرگز نباید سرور چت را زمین بزند.**
+If LiveKit is unreachable, these calls are merely logged and chat carries on.
+**Media must never take the chat server down.**
 
-### وضعیت میکروفون و دوربین
+### Microphone and camera state
 
-`media.set_state` را کلاینت می‌فرستد و سرور آن را به همه پخش می‌کند و در
-`User.media` نگه می‌دارد، تا درخت روم‌ها آیکون میکروفون و دوربین را نشان دهد.
+The client sends `media.set_state`; the server broadcasts it to everyone and
+keeps it in `User.media`, so the room tree can show microphone and camera icons.
 
-این گزارش **خودِ کلاینت** است، چون فقط خود کلاینت می‌داند دوربینش واقعاً روشن
-است یا نه. دروغ‌گفتن در آن چیزی جز یک آیکون اشتباه به دست نمی‌آورد، چون آنچه
-اجازهٔ روشن‌کردنش را دارد سمت سرور تصمیم‌گیری و توسط LiveKit اعمال می‌شود.
+This is the **client's own** report, because only the client knows whether its
+camera is really on. Lying about it gains nothing but a wrong icon, since what
+you are *allowed* to turn on is decided server-side and enforced by LiveKit.
 
-با خروج از روم، این وضعیت صفر می‌شود.
+Leaving a room resets this state.
 
-**«در حال صحبت» عمداً اینجا نیست:** چند بار در ثانیه عوض می‌شود و LiveKit
-خودش رویداد active speaker را مستقیم به همهٔ کلاینت‌ها می‌دهد. از همان استفاده
-کنید، نه از سرور تمیزچت.
+**"Currently speaking" is deliberately not here:** it changes several times a
+second and LiveKit gives every client the active speaker event directly. Use that,
+not the TamizChat server.
 
-### راه‌اندازی سمت اپراتور
+### Operator setup
 
-در پنل، بخش «ویس و ویدیو (LiveKit)»:
+In the panel, under "Voice and video (LiveKit)":
 
-- `livekit.url` — آدرسی که کلاینت به آن وصل می‌شود، مثل `ws://127.0.0.1:7880`.
-  آدرس API سرور از همین ساخته می‌شود (`ws://` → `http://`).
-- `livekit.api_key` و `livekit.api_secret` — همان‌هایی که در کانفیگ LiveKit
-  تعریف کرده‌اید.
-- `livekit.enabled` را بعد از تنظیم این سه، روشن کنید.
+- `livekit.url` — the address the client connects to, e.g. `ws://127.0.0.1:7880`.
+  The server's API address is derived from it (`ws://` → `http://`).
+- `livekit.api_key` and `livekit.api_secret` — the ones defined in the LiveKit
+  config.
+- Turn `livekit.enabled` on after setting those three.
 
 
-## تختهٔ نقاشی
+## The paint board
 
-تخته فهرستی از **خط‌ها** (stroke) است به ترتیب کشیده‌شدن، که مثل چت در حافظهٔ
-روم می‌ماند و با خالی‌شدن روم دور ریخته می‌شود.
+A board is a list of **strokes** in the order they were drawn, kept in the room's
+memory like chat and thrown away when the room empties.
 
-### خط‌ها جریانی‌اند
+### Strokes are streamed
 
-نقاشی نباید بعد از برداشتن ماوس ناگهان ظاهر شود، پس هر خط سه مرحله دارد:
+A drawing should not appear all at once when the mouse is released, so every
+stroke has three stages:
 
-۱. `paint.begin` — سرور شناسه می‌سازد و خط را به بقیه پخش می‌کند. اولین
-   نقطه‌ها می‌توانند همراه همین پیام بیایند تا یک حرکت کوتاه، دو رفت‌وبرگشت
-   نشود.
-۲. `paint.append` — نقطه‌های بعدی، همان‌طور که ماوس حرکت می‌کند.
-۳. `paint.end` — پایان خط.
+1. `paint.begin` — the server assigns an ID and broadcasts the stroke. The first
+   points can ride along with this message, so a short gesture does not need two
+   round trips.
+2. `paint.append` — the following points, as the mouse moves.
+3. `paint.end` — the end of the stroke.
 
-`paint.append` **پاسخ ندارد**: پرتکرارترین پیام سیستم است و کلاینت خودش نقطه را
-محلی کشیده. فقط خطاها یک فریم می‌گیرند، و افتادن یک نقطه ارزش قطع‌کردن نقاشی
-را ندارد.
+`paint.append` has **no reply**: it is the most frequent message in the system and
+the client has already drawn the point locally. Only errors produce a frame, and
+one dropped point is not worth interrupting a drawing over.
 
-قالب `Stroke`:
+The `Stroke` shape:
 
 ```json
 { "id": "…", "seq": 12, "room_id": "…", "author": "<client_uuid>",
@@ -514,98 +522,102 @@ WebSocket گرفته می‌شود، تا سرور بتواند پیش از در
   "points": [ {"x": 0.1, "y": 0.2} ], "done": false }
 ```
 
-ابزارها: `pen` · `eraser` · `line` · `rect` · `ellipse`
+Tools: `pen` · `eraser` · `line` · `rect` · `ellipse`
 
-### مختصات نرمال‌شده‌اند
+### Coordinates are normalized
 
-`x` و `y` بین ۰ و ۱ هستند، نه پیکسل — وگرنه نقاشی روی پنجرهٔ کسی که رزولوشن
-دیگری دارد جابه‌جا می‌افتد. `width` هم در همین فضاست.
+`x` and `y` are between 0 and 1, not pixels — otherwise the drawing lands in the
+wrong place on a window at a different resolution. `width` is in the same space.
 
-سرور مختصات غیرعددی (NaN و بی‌نهایت) را **دور می‌ریزد** و بقیه را به حاشیهٔ
-بوم محدود می‌کند؛ یک NaN از یک کلاینت خراب می‌تواند رندر همهٔ کلاینت‌های دیگر
-را به هم بریزد.
+The server **discards** non-numeric coordinates (NaN and infinity) and clamps the
+rest to the canvas edge; one NaN from one broken client can wreck the rendering
+on every other client.
 
-### تازه‌واردها
+### Newcomers
 
-`paint.state` بفرستید تا کل تخته را بگیرید. سرور خودکار آن را پوش نمی‌کند،
-چون یک تختهٔ شلوغ می‌تواند بزرگ باشد و بیشتر کاربران هرگز پنل نقاشی را باز
-نمی‌کنند.
+Send `paint.state` to fetch the whole board. The server does not push it
+automatically, because a busy board can be large and most users never open the
+paint panel.
 
-### پاک‌کردن و undo
+### Clearing and undo
 
-- `paint.undo` آخرین خط **خودتان** را برمی‌دارد، حتی اگر بعدش کس دیگری کشیده
-  باشد.
-- `paint.clear` با `scope: "mine"` فقط کارِ خودتان را پاک می‌کند.
-- `paint.clear` با `scope: "all"` کل تخته را پاک می‌کند و چون کار دیگران را
-  نابود می‌کند، مجوز `moderate_chat` می‌خواهد.
+- `paint.undo` removes **your own** last stroke, even if somebody else has drawn
+  since.
+- `paint.clear` with `scope: "mine"` erases only your work.
+- `paint.clear` with `scope: "all"` erases the whole board and, because it
+  destroys other people's work, requires the `moderate_chat` permission.
 
-### محدودیت‌ها
+### Limits
 
-- سقف تعداد خط در تخته (`paint.max_strokes`، پیش‌فرض ۲۰۰۰). وقتی پر شد سرور
-  خط جدید را **رد می‌کند** و خطای `paint_board_full` می‌دهد — قدیمی‌ترها را
-  دور نمی‌ریزد، چون پاک‌کردن نامحسوس ابتدای یک نقاشی بدتر از گفتن «نه» است.
-- سقف ۴۰۰۰ نقطه در هر خط و ۵۱۲ نقطه در هر پیام.
-- سقف نرخ جداگانه برای نقاشی (`paint.rate_per_second` و `paint.rate_burst`).
-- کاربر میوت‌شده نمی‌تواند نقاشی کند: خط‌خطی‌کردن روی همه، همان مزاحمتی است
-  که داد زدن.
+- A cap on strokes per board (`paint.max_strokes`, 2000 by default). Once full,
+  the server **rejects** a new stroke with `paint_board_full` — it does not drop
+  the oldest, because silently erasing the beginning of a drawing is worse than
+  saying no.
+- A cap of 4000 points per stroke and 512 points per message.
+- A separate rate limit for painting (`paint.rate_per_second` and
+  `paint.rate_burst`).
+- A muted user cannot draw: scribbling over everyone is the same nuisance as
+  shouting.
 
 
-## بات‌ها
+## Bots
 
-بات موسیقی مثل یک شرکت‌کنندهٔ عادی در روم می‌نشیند و از یک فولدر آهنگ پخش
-می‌کند. **صدا از این سرور رد نمی‌شود**: سرویس Ingress لایوکیت فایل را از یک
-اندپوینت HTTP همین سرور می‌گیرد، تبدیل می‌کند و خودش داخل روم منتشر می‌کند.
-این سرور تصمیم می‌گیرد *چه چیزی* و *کجا* پخش شود، نه اینکه بایت‌ها را جابه‌جا
-کند.
+A music bot sits in a room like an ordinary participant and plays from a folder
+of tracks. **The audio does not pass through this server**: LiveKit's Ingress
+service fetches the file from an HTTP endpoint on this server, transcodes it, and
+publishes it into the room itself. This server decides *what* plays and *where*,
+not how the bytes move.
 
-قالب `Bot`:
+The `Bot` shape:
 
 ```json
-{ "id": "…", "name": "دی‌جی", "kind": "music", "color": "",
+{ "id": "…", "name": "DJ", "kind": "music", "color": "",
   "room_id": "…", "state": "playing",
-  "track": { "index": 3, "title": "نام آهنگ" },
+  "track": { "index": 3, "title": "track name" },
   "track_count": 42, "loop": true, "shuffle": false, "enabled": true }
 ```
 
-وضعیت‌ها: `idle` (در هیچ رومی نیست) · `stopped` (در روم است، ساکت) · `playing`
+States: `idle` (in no room) · `stopped` (in a room, silent) · `playing`
 
-دستورها (`bot.control` → `action`): `play` · `stop` · `next` · `prev` ·
-`select` (با `track_index`)
+Commands (`bot.control` → `action`): `play` · `stop` · `next` · `prev` ·
+`select` (with `track_index`)
 
-هر تغییری در وضعیت بات، یک `bot.state` برای همه منتشر می‌کند — درست مثل حضور
-کاربرها، چون کلاینت بات را کنار آدم‌ها در همان درخت نشان می‌دهد.
+Any change to a bot's state broadcasts a `bot.state` to everyone — just like user
+presence, because the client shows bots next to people in the same tree.
 
-### چه چیزی عمداً نیست
+### What is deliberately missing
 
-- **مکث (pause) نداریم.** با Ingress، متوقف‌کردن یعنی بستن جریان؛ ادامه‌دادن
-  آهنگ را از **اول** شروع می‌کند. یک دکمهٔ pause که وسط آهنگ را می‌پراند بدتر
-  از نبودنش است. `stop` هست و صادق است.
-- **کنترل صدا سمت سرور نیست.** بلندی صدای هر شرکت‌کننده را خود شنونده در
-  کلاینت تنظیم می‌کند (LiveKit این را دارد) — که بهتر هم هست: هر کسی صدای
-  بات را برای خودش کم و زیاد می‌کند، نه برای همه.
+- **There is no pause.** With Ingress, stopping means closing the stream;
+  resuming restarts the track from the **beginning**. A pause button that jumps
+  out of the middle of a song is worse than no button. `stop` exists and is
+  honest.
+- **There is no server-side volume control.** Each listener sets a participant's
+  volume in their own client (LiveKit supports this) — which is better anyway:
+  everyone adjusts the bot for themselves, not for the whole room.
 
-### راه‌اندازی
+### Setup
 
-۱. بات را از پنل مدیریت بسازید (گزینهٔ ۱۰): نام و مسیر فولدر موسیقی. پنل
-   همان‌جا می‌گوید چند فایل قابل پخش پیدا کرده، تا اشتباه تایپی در مسیر
-   بلافاصله دیده شود.
-۲. `network.public_host` را مقدار بدهید. Ingress باید بتواند فایل را از این
-   سرور بگیرد و سرور نمی‌تواند حدس بزند از بیرون با چه آدرسی دیده می‌شود.
-۳. LiveKit و سرویس **Ingress** آن باید بالا باشند و وب‌هوک لایوکیت به
-   `POST /api/v1/livekit/webhook` این سرور اشاره کند.
+1. Create the bot from the admin panel (option 10): a name and a music folder
+   path. The panel says right there how many playable files it found, so a typo
+   in the path is visible immediately.
+2. Set `network.public_host`. Ingress has to fetch the file from this server, and
+   the server cannot guess what address it is reachable at from outside.
+3. LiveKit and its **Ingress** service must be up, and the LiveKit webhook must
+   point at this server's `POST /api/v1/livekit/webhook`.
 
-فرمت فایل‌ها مهم نیست (mp3, ogg, flac, m4a, …) — تبدیل با Ingress است.
+The file format does not matter (mp3, ogg, flac, m4a, …) — Ingress handles the
+conversion.
 
-### وب‌هوک
+### The webhook
 
-`POST /api/v1/livekit/webhook` تنها راهی است که سرور می‌فهمد آهنگ تمام شده و
-باید بعدی را بگذارد. امضای لایوکیت (JWT با ادعای `sha256` برابر هش بدنه)
-**قبل از هر اقدامی** بررسی می‌شود؛ این اندپوینت احراز هویت دیگری ندارد، پس
-درخواست بدون امضا هیچ چیزی را تغییر نمی‌دهد.
+`POST /api/v1/livekit/webhook` is the only way the server learns that a track
+finished and the next one should start. LiveKit's signature (a JWT whose `sha256`
+claim equals the body hash) is verified **before anything else happens**; this
+endpoint has no other authentication, so an unsigned request changes nothing.
 
-### فایل موسیقی
+### The music file
 
-`GET /api/v1/bot-stream/{bot_id}?token=…` تنها مصرف‌کننده‌اش Ingress است.
-توکن یک‌بارمصرفِ همان پخش است و با `stop` باطل می‌شود. مسیر فایل هرگز از
-سمت کلاینت نمی‌آید — از ایندکس صف ساخته می‌شود و دوباره بررسی می‌شود که
-داخل فولدر تنظیم‌شدهٔ بات باشد.
+`GET /api/v1/bot-stream/{bot_id}?token=…` has exactly one consumer: Ingress. The
+token is single-use for that one playback and is invalidated by `stop`. The file
+path never comes from the client — it is derived from the queue index and
+re-checked to be inside the bot's configured folder.

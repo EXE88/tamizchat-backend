@@ -141,12 +141,12 @@ func TestReloadAppliesPanelChangesToTheRunningServer(t *testing.T) {
 	ctx := context.Background()
 
 	// The panel writes straight to the database, as it always has.
-	if err := s.cfg.Set(ctx, config.KeyServerName, "نام تازه"); err != nil {
+	if err := s.cfg.Set(ctx, config.KeyServerName, "New name"); err != nil {
 		t.Fatalf("set name: %v", err)
 	}
 	roomID := storage.NewUUID()
 	if err := s.store.CreateRoom(ctx, storage.Room{
-		ID: roomID, Name: "اتاق تازه", Capacity: 10,
+		ID: roomID, Name: "New room", Capacity: 10,
 	}); err != nil {
 		t.Fatalf("create room: %v", err)
 	}
@@ -156,7 +156,7 @@ func TestReloadAppliesPanelChangesToTheRunningServer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("status: %v", err)
 	}
-	if before.Rooms != 0 || before.ServerName == "نام تازه" {
+	if before.Rooms != 0 || before.ServerName == "New name" {
 		t.Fatalf("the running server should not have picked these up yet: %+v", before)
 	}
 
@@ -175,7 +175,7 @@ func TestReloadAppliesPanelChangesToTheRunningServer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("status: %v", err)
 	}
-	if after.ServerName != "نام تازه" || after.Rooms != 1 {
+	if after.ServerName != "New name" || after.Rooms != 1 {
 		t.Fatalf("the reload did not take effect: %+v", after)
 	}
 
@@ -184,7 +184,7 @@ func TestReloadAppliesPanelChangesToTheRunningServer(t *testing.T) {
 	send(t, ctx, conn, protocol.TypeRoomList, "l1", nil)
 	var list protocol.RoomList
 	expect(t, ctx, conn, protocol.TypeRooms, &list)
-	if len(list.Rooms) != 1 || list.Rooms[0].Name != "اتاق تازه" {
+	if len(list.Rooms) != 1 || list.Rooms[0].Name != "New room" {
 		t.Fatalf("the client should see the new room: %+v", list.Rooms)
 	}
 }
@@ -259,7 +259,7 @@ func TestControlKickAndNotice(t *testing.T) {
 	const uuid = "11111111-1111-4111-8111-111111111111"
 	conn := s.connect(t, uuid, "Alice")
 
-	if err := s.control.Notice("سرور تا ده دقیقهٔ دیگر ری‌استارت می‌شود"); err != nil {
+	if err := s.control.Notice("the server restarts in ten minutes"); err != nil {
 		t.Fatalf("notice: %v", err)
 	}
 	var notice protocol.ServerNotice
@@ -268,12 +268,12 @@ func TestControlKickAndNotice(t *testing.T) {
 		t.Fatalf("unexpected notice: %+v", notice)
 	}
 
-	if err := s.control.Kick(uuid, "برای تست"); err != nil {
+	if err := s.control.Kick(uuid, "for testing"); err != nil {
 		t.Fatalf("kick: %v", err)
 	}
 	var kicked protocol.Moderation
 	expect(t, ctx, conn, protocol.TypeUserKicked, &kicked)
-	if kicked.ClientUUID != uuid || kicked.Reason != "برای تست" {
+	if kicked.ClientUUID != uuid || kicked.Reason != "for testing" {
 		t.Fatalf("unexpected kick event: %+v", kicked)
 	}
 

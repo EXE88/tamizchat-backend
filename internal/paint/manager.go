@@ -172,7 +172,7 @@ func (m *Manager) Clear(sess *session.Session, req protocol.PaintClear) (protoco
 		}
 		board.ClearAll()
 	default:
-		return protocol.PaintCleared{}, &ValidationError{Msg: "دامنهٔ پاک‌کردن نامعتبر است"}
+		return protocol.PaintCleared{}, &ValidationError{Msg: "the clear scope is not valid"}
 	}
 
 	event := protocol.PaintCleared{RoomID: room.ID(), Scope: scope, By: sess.ClientUUID}
@@ -282,16 +282,16 @@ func validateBegin(req *protocol.PaintBegin) error {
 	case protocol.ToolPen, protocol.ToolEraser, protocol.ToolLine,
 		protocol.ToolRect, protocol.ToolEllipse:
 	default:
-		return &ValidationError{Msg: fmt.Sprintf("ابزار نامعتبر: %s", req.Tool)}
+		return &ValidationError{Msg: fmt.Sprintf("invalid tool: %s", req.Tool)}
 	}
 
 	req.Color = strings.TrimSpace(req.Color)
 	if len([]rune(req.Color)) > maxColorLen {
-		return &ValidationError{Msg: "مقدار رنگ بیش از حد بلند است"}
+		return &ValidationError{Msg: "the colour value is too long"}
 	}
 	for _, r := range req.Color {
 		if r < 0x20 || r == 0x7f {
-			return &ValidationError{Msg: "مقدار رنگ نامعتبر است"}
+			return &ValidationError{Msg: "the colour value is not valid"}
 		}
 	}
 

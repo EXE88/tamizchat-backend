@@ -28,8 +28,8 @@ func main() {
 
 func run() error {
 	fs := flag.NewFlagSet("tamizchat", flag.ContinueOnError)
-	dbPath := fs.String("db", envOr("TAMIZCHAT_DB", defaultDBPath), "مسیر فایل دیتابیس SQLite")
-	logLevel := fs.String("log", "info", "سطح لاگ اولیه: debug|info|warn|error")
+	dbPath := fs.String("db", envOr("TAMIZCHAT_DB", defaultDBPath), "path to the SQLite database file")
+	logLevel := fs.String("log", "info", "initial log level: debug|info|warn|error")
 	fs.Usage = usage
 
 	cmd := "panel"
@@ -57,24 +57,24 @@ func run() error {
 		return nil
 	default:
 		usage()
-		return fmt.Errorf("دستور ناشناخته: %s", cmd)
+		return fmt.Errorf("unknown command: %s", cmd)
 	}
 }
 
 func usage() {
 	fmt.Fprint(os.Stderr, `TamizChat backend
 
-استفاده:
-  tamizchat [دستور] [پرچم‌ها]
+Usage:
+  tamizchat [command] [flags]
 
-دستورها:
-  panel     پنل مدیریت تعاملی (پیش‌فرض)
-  run       اجرای سرور
-  version   نمایش نسخه
+Commands:
+  panel     interactive admin panel (default)
+  run       run the server
+  version   print the version
 
-پرچم‌ها:
-  -db     مسیر فایل دیتابیس (پیش‌فرض data/tamizchat.db، یا TAMIZCHAT_DB)
-  -log    سطح لاگ اولیه: debug|info|warn|error
+Flags:
+  -db     path to the database file (default data/tamizchat.db, or TAMIZCHAT_DB)
+  -log    initial log level: debug|info|warn|error
 `)
 }
 

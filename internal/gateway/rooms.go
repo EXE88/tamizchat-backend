@@ -19,7 +19,7 @@ func (g *Gateway) handleRoomList(sess *session.Session, env protocol.Envelope) {
 func (g *Gateway) handleRoomJoin(sess *session.Session, env protocol.Envelope) {
 	var req protocol.RoomJoin
 	if err := json.Unmarshal(env.Data, &req); err != nil {
-		sess.SendError(env.ID, protocol.ErrBadRequest, "محتوای پیام معتبر نیست")
+		sess.SendError(env.ID, protocol.ErrBadRequest, "the message payload is not valid")
 		return
 	}
 
@@ -49,7 +49,7 @@ func (g *Gateway) handleRoomCreate(ctx context.Context, sess *session.Session, e
 
 	var req protocol.RoomCreate
 	if err := json.Unmarshal(env.Data, &req); err != nil {
-		sess.SendError(env.ID, protocol.ErrBadRequest, "محتوای پیام معتبر نیست")
+		sess.SendError(env.ID, protocol.ErrBadRequest, "the message payload is not valid")
 		return
 	}
 
@@ -70,7 +70,7 @@ func (g *Gateway) handleRoomUpdate(ctx context.Context, sess *session.Session, e
 
 	var req protocol.RoomUpdate
 	if err := json.Unmarshal(env.Data, &req); err != nil {
-		sess.SendError(env.ID, protocol.ErrBadRequest, "محتوای پیام معتبر نیست")
+		sess.SendError(env.ID, protocol.ErrBadRequest, "the message payload is not valid")
 		return
 	}
 
@@ -89,7 +89,7 @@ func (g *Gateway) handleRoomDelete(ctx context.Context, sess *session.Session, e
 
 	var req protocol.RoomDelete
 	if err := json.Unmarshal(env.Data, &req); err != nil {
-		sess.SendError(env.ID, protocol.ErrBadRequest, "محتوای پیام معتبر نیست")
+		sess.SendError(env.ID, protocol.ErrBadRequest, "the message payload is not valid")
 		return
 	}
 
@@ -106,21 +106,21 @@ func (g *Gateway) handleRoomDelete(ctx context.Context, sess *session.Session, e
 func (g *Gateway) replyRoomError(sess *session.Session, id string, err error) {
 	switch {
 	case errors.Is(err, rooms.ErrNotFound):
-		sess.SendError(id, protocol.ErrRoomNotFound, "چنین رومی وجود ندارد")
+		sess.SendError(id, protocol.ErrRoomNotFound, "no such room exists")
 	case errors.Is(err, rooms.ErrNameTaken):
-		sess.SendError(id, protocol.ErrRoomNameTaken, "رومی با این نام وجود دارد")
+		sess.SendError(id, protocol.ErrRoomNameTaken, "a room with that name already exists")
 	case errors.Is(err, rooms.ErrBadPassword):
-		sess.SendError(id, protocol.ErrRoomPassword, "رمز روم نادرست است")
+		sess.SendError(id, protocol.ErrRoomPassword, "the room password is wrong")
 	case errors.Is(err, rooms.ErrFull):
-		sess.SendError(id, protocol.ErrRoomFull, "ظرفیت روم تکمیل است")
+		sess.SendError(id, protocol.ErrRoomFull, "the room is full")
 	case errors.Is(err, rooms.ErrLimitReached):
-		sess.SendError(id, protocol.ErrRoomLimit, "به سقف تعداد روم‌های سرور رسیده‌اید")
+		sess.SendError(id, protocol.ErrRoomLimit, "you have reached the server's room limit")
 	case errors.Is(err, rooms.ErrNotInRoom):
-		sess.SendError(id, protocol.ErrNotInRoom, "در هیچ رومی نیستید")
+		sess.SendError(id, protocol.ErrNotInRoom, "you are not in a room")
 	case errors.Is(err, rooms.ErrRoleRequired):
-		sess.SendError(id, protocol.ErrRoleRequired, "برای ورود به این روم رول لازم را ندارید")
+		sess.SendError(id, protocol.ErrRoleRequired, "you do not have the role required to join this room")
 	case errors.Is(err, rooms.ErrRoleUnknown):
-		sess.SendError(id, protocol.ErrRoleNotFound, "چنین رولی وجود ندارد")
+		sess.SendError(id, protocol.ErrRoleNotFound, "no such role exists")
 	default:
 		var invalid *rooms.ValidationError
 		if errors.As(err, &invalid) {
@@ -128,6 +128,6 @@ func (g *Gateway) replyRoomError(sess *session.Session, id string, err error) {
 			return
 		}
 		slog.Error("room operation failed", "client_uuid", sess.ClientUUID, "err", err)
-		sess.SendError(id, protocol.ErrInternal, "خطای داخلی سرور")
+		sess.SendError(id, protocol.ErrInternal, "internal server error")
 	}
 }

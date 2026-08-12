@@ -1,54 +1,56 @@
-# راه‌اندازی LiveKit برای TamizChat (بدون دامنه، بدون TLS)
+# Setting up LiveKit for TamizChat (no domain, no TLS)
 
-این راهنما برای حالتی است که شما و چند دوستتان می‌خواهید همه‌چیز — از جمله
-ویس و ویدیو — روی یک سرور بالا بیاید، فقط با آی‌پی.
+This guide covers the case where you and a few friends want everything — voice
+and video included — running on one server, with nothing but an IP address.
 
-## آیا واقعاً بدون TLS می‌شود؟
+## Can this really work without TLS?
 
-**بله.** کلاینت TamizChat یک اپ دسکتاپ است، نه مرورگر. آن قانون معروف
-«برای میکروفون حتماً HTTPS» مال مرورگرهاست. اپ دسکتاپ راحت به
-`ws://<آی‌پی>:7880` وصل می‌شود و WebRTC هم بدون TLS کار می‌کند.
+**Yes.** The TamizChat client is a desktop app, not a browser. The famous
+"microphone requires HTTPS" rule belongs to browsers. A desktop app connects to
+`ws://<ip>:7880` happily, and WebRTC works without TLS.
 
-تنها جایی که به دیوار می‌خورید: تست با **مرورگر** (مثل LiveKit Meet). آنجا
-بدون HTTPS میکروفون داده نمی‌شود، مگر روی `localhost`.
+The one place you hit a wall: testing with a **browser** (like LiveKit Meet).
+There you get no microphone without HTTPS, except on `localhost`.
 
-> اگر روزی سرور را روی اینترنت عمومی گذاشتید و کاربر ناشناس داشتید، TLS
-> بگذارید — نه به‌خاطر WebRTC (که خودش رمزنگاری‌شده است) بلکه به‌خاطر
-> سیگنالینگ و رمز سرور که در `ws://` ساده رد و بدل می‌شوند.
+> If you ever put the server on the public internet with strangers on it, add
+> TLS — not because of WebRTC (which is encrypted anyway) but because of the
+> signalling and the server password, which travel in the clear over plain
+> `ws://`.
 
-## آیا Ingress لازم دارید؟
+## Do you need Ingress?
 
-فقط برای **بات موسیقی**. ویس چت، ویدیو چت و اشتراک صفحه بدون آن کار
-می‌کنند. توصیه: اول بدون Ingress راه بیندازید، بعد اگر بات خواستید اضافه
-کنید. یک سرویس کمتر یعنی یک چیز کمتر برای خراب شدن.
+Only for the **music bot**. Voice chat, video chat and screen sharing all work
+without it. Recommendation: get it running without Ingress first, then add it if
+you want the bot. One less service is one less thing to break.
 
 ---
 
-## گام ۱ — کلید بسازید
+## Step 1 — generate keys
 
 ```bash
 docker run --rm livekit/livekit-server generate-keys
 ```
 
-دو خط می‌دهد: یک `API...` و یک سکرت. هر دو را نگه دارید — سه جا لازمشان
-دارید: `livekit.yaml`، `ingress.yaml` (اگر بات خواستید) و پنل TamizChat.
+It prints two lines: an `API...` key and a secret. Keep both — you need them in
+three places: `livekit.yaml`, `ingress.yaml` (if you want the bot) and the
+TamizChat panel.
 
-اگر داکر ندارید:
+If you do not have Docker:
 
 ```bash
 echo "API$(openssl rand -hex 6)"
 openssl rand -base64 32
 ```
 
-## گام ۲ — کانفیگ را پر کنید
+## Step 2 — fill in the config
 
-در پوشهٔ `deploy/`:
+In the `deploy/` folder:
 
-- در `livekit.yaml` بخش `keys` را با کلید و سکرت خودتان عوض کنید.
-- اگر سرور **خانگی و پشت مودم** است، بخش `use_external_ip` را بخوانید و
-  طبق توضیحش `node_ip` را دستی بگذارید.
+- In `livekit.yaml`, replace the `keys` section with your own key and secret.
+- If the server is **at home behind a router**, read the `use_external_ip`
+  section and set `node_ip` by hand as it explains.
 
-## گام ۳ — LiveKit را بالا بیاورید
+## Step 3 — bring LiveKit up
 
 ```bash
 cd deploy
@@ -56,34 +58,34 @@ docker compose up -d
 docker compose logs -f livekit
 ```
 
-در لاگ باید ببینید که روی پورت ۷۸۸۰ گوش می‌دهد. تست:
+The log should show it listening on port 7880. Test it:
 
 ```bash
 curl http://127.0.0.1:7880
 ```
 
-جواب `OK` یعنی بالاست.
+An `OK` reply means it is up.
 
-### بدون داکر
+### Without Docker
 
-اگر داکر نمی‌خواهید:
+If you would rather not use Docker:
 
 ```bash
 curl -sSL https://get.livekit.io | bash
 livekit-server --config livekit.yaml
 ```
 
-بعد با همان فایل سرویس systemd که پنل TamizChat می‌سازد، الگو بگیرید و
-برای LiveKit هم یکی بنویسید.
+Then take the systemd unit file the TamizChat panel generates as a template and
+write one for LiveKit too.
 
-## گام ۴ — پورت‌ها را باز کنید
+## Step 4 — open the ports
 
-| پورت | پروتکل | برای چه |
-|------|--------|---------|
-| ۸۰۸۰ | TCP | خود TamizChat (کلاینت‌ها) |
-| ۷۸۸۰ | TCP | سیگنالینگ LiveKit |
-| ۷۸۸۲ | **UDP** | صدا و تصویر |
-| ۷۸۸۱ | TCP | مسیر پشتیبان وقتی UDP بسته است |
+| Port | Protocol | For what |
+|------|----------|----------|
+| 8080 | TCP | TamizChat itself (clients) |
+| 7880 | TCP | LiveKit signalling |
+| 7882 | **UDP** | audio and video |
+| 7881 | TCP | fallback path when UDP is blocked |
 
 ```bash
 sudo ufw allow 8080/tcp
@@ -92,101 +94,102 @@ sudo ufw allow 7881/tcp
 sudo ufw allow 7882/udp
 ```
 
-روی سرور خانگی، همین چهارتا را روی مودم هم forward کنید.
+On a home server, forward those same four on the router as well.
 
-> **پورت UDP مهم‌ترین است.** اگر بازش نکنید، اتصال برقرار می‌شود ولی صدا
-> نمی‌آید یا با تأخیر زیاد از مسیر TCP می‌آید.
+> **The UDP port matters most.** Without it the connection is established but
+> there is no audio, or it arrives late over the TCP fallback.
 
-## گام ۵ — به TamizChat معرفی کنید
+## Step 5 — tell TamizChat about it
 
-پنل را باز کنید (`./tamizchat`) → **گزینهٔ ۲ → ویس و ویدیو (LiveKit)**:
+Open the panel (`./tamizchat`) → **option 2 → Voice and video (LiveKit)**:
 
-| تنظیم | مقدار |
-|-------|-------|
-| `livekit.url` | `ws://<آی‌پی سرور>:7880` |
-| `livekit.api_key` | همان `API...` |
-| `livekit.api_secret` | همان سکرت |
-| `livekit.enabled` | `true` — **آخر از همه** |
+| Setting | Value |
+|---------|-------|
+| `livekit.url` | `ws://<server ip>:7880` |
+| `livekit.api_key` | the `API...` key |
+| `livekit.api_secret` | the secret |
+| `livekit.enabled` | `true` — **last of all** |
 
-آدرس باید همانی باشد که **کلاینت‌ها** با آن به سرور می‌رسند، نه
-`127.0.0.1`. اگر دوستانتان از اینترنت وصل می‌شوند، آی‌پی عمومی؛ اگر از
-شبکهٔ داخلی، آی‌پی داخلی.
+The address must be the one **clients** use to reach the server, not
+`127.0.0.1`. If your friends connect over the internet, use the public IP; over
+a LAN, the local one.
 
-بعد از ذخیره، پنل می‌پرسد «همین حالا اعمال شود؟» — بله بزنید.
+After saving, the panel asks "apply now?" — say yes.
 
-## گام ۶ — تست کنید
+## Step 6 — test it
 
-در پنل، **گزینهٔ ۱۱ → وضعیت لحظه‌ای**. باید ببینید:
+In the panel, **option 11 → Live status**. You should see:
 
 ```
-ویس/ویدیو     : فعال
+Voice/video   : enabled
 ```
 
-اگر `غیرفعال` است، یکی از آن سه مقدار خالی مانده.
+If it says `disabled`, one of those three values is still empty.
 
 ---
 
-## اضافه کردن بات موسیقی (اختیاری)
+## Adding the music bot (optional)
 
-۱. در `livekit.yaml` بخش `redis` را از کامنت دربیاورید.
-۲. در `ingress.yaml` کلید و سکرت را بگذارید.
-۳. بالا بیاورید:
+1. Uncomment the `redis` section in `livekit.yaml`.
+2. Put the key and secret in `ingress.yaml`.
+3. Bring it up:
 
 ```bash
 docker compose --profile bots up -d
-curl http://127.0.0.1:8086     # سلامت Ingress
+curl http://127.0.0.1:8086     # Ingress health
 ```
 
-۴. در پنل TamizChat **حتماً** این را ست کنید:
+4. In the TamizChat panel you **must** set:
 
 ```
-network.public_host = http://<آی‌پی سرور>:8080
+network.public_host = http://<server ip>:8080
 ```
 
-بدون آن بات پخش نمی‌کند. دلیلش: Ingress باید فایل موسیقی را از سرور شما
-**بگیرد**، و سرور نمی‌تواند حدس بزند از بیرون با چه آدرسی دیده می‌شود.
+Without it the bot plays nothing. The reason: Ingress has to **fetch** the music
+file from your server, and the server cannot guess what address it is reachable
+at from outside.
 
-۵. وب‌هوک LiveKit را تنظیم کنید. در `livekit.yaml` اضافه کنید:
+5. Configure the LiveKit webhook. Add this to `livekit.yaml`:
 
 ```yaml
 webhook:
-  api_key: APIchangeme          # همان کلید
+  api_key: APIchangeme          # the same key
   urls:
-    - http://<آی‌پی سرور>:8080/api/v1/livekit/webhook
+    - http://<server ip>:8080/api/v1/livekit/webhook
 ```
 
-بدون این، بات بعد از تمام‌شدن **آهنگ اول ساکت می‌ماند** — چون سرور خبردار
-نمی‌شود که آهنگ تمام شده و باید بعدی را بگذارد.
+Without this, the bot **goes quiet after the first track** — the server never
+learns that the track ended and that it should start the next one.
 
-۶. بات را از **گزینهٔ ۱۰ پنل** با نام و مسیر فولدر موسیقی بسازید.
-
----
-
-## عیب‌یابی
-
-**وصل می‌شود ولی صدا نمی‌آید** → پورت UDP بسته است، یا `use_external_ip`
-آدرس اشتباه اعلام می‌کند. `log_level: debug` بگذارید و لاگ LiveKit را
-ببینید.
-
-**اپ اصلاً به مدیا وصل نمی‌شود** → `livekit.url` را از روی همان ماشینِ
-کلاینت تست کنید: `curl http://<آی‌پی>:7880`.
-
-**بات فقط یک آهنگ می‌خواند** → وب‌هوک تنظیم نشده (گام ۵ بالا).
-
-**بات اصلاً پخش نمی‌کند** → `network.public_host` خالی است، یا Ingress به
-آن آدرس نمی‌رسد. از داخل کانتینر تست کنید:
-`docker exec tamizchat-ingress wget -qO- http://<آی‌پی سرور>:8080/healthz`
+6. Create the bot from **panel option 10** with a name and a music folder path.
 
 ---
 
-## یک هشدار صادقانه
+## Troubleshooting
 
-فایل‌های `deploy/` بر اساس شکل مستندشدهٔ کانفیگ LiveKit نوشته شده‌اند، ولی
-**روی این ماشین اجرا و تست نشده‌اند** — LiveKit اینجا نصب نیست. نام کلیدها
-بین نسخه‌های LiveKit گاهی جابه‌جا می‌شود.
+**Connects but there is no audio** → the UDP port is closed, or
+`use_external_ip` is announcing the wrong address. Set `log_level: debug` and
+read the LiveKit log.
 
-اگر موقع بالا آوردن، LiveKit از کلیدی شکایت کرد، با کانفیگ نمونهٔ همان
-نسخه‌ای که کشیده‌اید مقایسه کنید:
+**The app does not reach media at all** → test `livekit.url` from the client's
+own machine: `curl http://<ip>:7880`.
+
+**The bot plays only one track** → the webhook is not configured (step 5 above).
+
+**The bot plays nothing at all** → `network.public_host` is empty, or Ingress
+cannot reach that address. Test from inside the container:
+`docker exec tamizchat-ingress wget -qO- http://<server ip>:8080/healthz`
+
+---
+
+## An honest warning
+
+The files in `deploy/` were written against the documented shape of the LiveKit
+config, but **they have not been run or tested on this machine** — LiveKit is not
+installed here. Key names occasionally move between LiveKit versions.
+
+If LiveKit complains about a key when you bring it up, compare against the sample
+config for the exact version you pulled:
 
 ```bash
 docker run --rm livekit/livekit-server --help

@@ -87,7 +87,7 @@ func (h controlHandler) Online(context.Context) []control.OnlineUser {
 			Username:   user.Username,
 			RoomID:     user.RoomID,
 			RoomName:   roomNames[user.RoomID],
-			Roles:      strings.Join(names, "، "),
+			Roles:      strings.Join(names, ", "),
 			Muted:      user.Muted,
 			Remote:     sess.RemoteAddr,
 			OnlineSec:  int64(time.Since(sess.JoinedAt).Seconds()),
@@ -131,13 +131,13 @@ func (h controlHandler) Reload(ctx context.Context) (control.ReloadResult, error
 func (h controlHandler) Kick(ctx context.Context, args control.KickArgs) error {
 	sess, ok := h.sessions.Get(strings.TrimSpace(args.ClientUUID))
 	if !ok {
-		return errors.New("این کاربر آنلاین نیست")
+		return errors.New("that user is not online")
 	}
 
 	event := protocol.Moderation{
 		ClientUUID: sess.ClientUUID,
 		Username:   sess.Username(),
-		ByUsername: "پنل مدیریت",
+		ByUsername: "Admin panel",
 		Reason:     args.Reason,
 	}
 	_ = sess.SendMessage(protocol.TypeUserKicked, "", event)
@@ -155,12 +155,12 @@ func (h controlHandler) Kick(ctx context.Context, args control.KickArgs) error {
 func (h controlHandler) Notice(ctx context.Context, args control.NoticeArgs) error {
 	text := strings.TrimSpace(args.Text)
 	if text == "" {
-		return errors.New("متن پیام خالی است")
+		return errors.New("the notice text is empty")
 	}
 
 	h.sessions.Broadcast(protocol.TypeServerNotice, protocol.ServerNotice{
 		Text: text,
-		From: "پنل مدیریت",
+		From: "Admin panel",
 	}, "")
 
 	h.access.Log(ctx, storage.ModEntry{ActorName: "panel", Action: "notice", Detail: text})

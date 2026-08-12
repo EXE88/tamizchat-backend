@@ -67,7 +67,7 @@ func TestHealthz(t *testing.T) {
 func TestServerInfoReflectsConfig(t *testing.T) {
 	h, cfg := newHandler(t, 3)
 	ctx := context.Background()
-	if err := cfg.Set(ctx, config.KeyServerName, "خانهٔ ما"); err != nil {
+	if err := cfg.Set(ctx, config.KeyServerName, "Our place"); err != nil {
 		t.Fatalf("set name: %v", err)
 	}
 	if err := cfg.Set(ctx, config.KeyServerPassword, "hunter2"); err != nil {
@@ -78,7 +78,7 @@ func TestServerInfoReflectsConfig(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d", rec.Code)
 	}
-	if body["name"] != "خانهٔ ما" {
+	if body["name"] != "Our place" {
 		t.Fatalf("name = %v", body["name"])
 	}
 	if body["password_required"] != true {

@@ -13,7 +13,7 @@ import (
 func (g *Gateway) handlePaintBegin(sess *session.Session, env protocol.Envelope) {
 	var req protocol.PaintBegin
 	if err := json.Unmarshal(env.Data, &req); err != nil {
-		sess.SendError(env.ID, protocol.ErrBadRequest, "محتوای پیام معتبر نیست")
+		sess.SendError(env.ID, protocol.ErrBadRequest, "the message payload is not valid")
 		return
 	}
 
@@ -29,7 +29,7 @@ func (g *Gateway) handlePaintBegin(sess *session.Session, env protocol.Envelope)
 func (g *Gateway) handlePaintAppend(sess *session.Session, env protocol.Envelope) {
 	var req protocol.PaintAppend
 	if err := json.Unmarshal(env.Data, &req); err != nil {
-		sess.SendError(env.ID, protocol.ErrBadRequest, "محتوای پیام معتبر نیست")
+		sess.SendError(env.ID, protocol.ErrBadRequest, "the message payload is not valid")
 		return
 	}
 
@@ -45,7 +45,7 @@ func (g *Gateway) handlePaintAppend(sess *session.Session, env protocol.Envelope
 func (g *Gateway) handlePaintEnd(sess *session.Session, env protocol.Envelope) {
 	var req protocol.PaintEnd
 	if err := json.Unmarshal(env.Data, &req); err != nil {
-		sess.SendError(env.ID, protocol.ErrBadRequest, "محتوای پیام معتبر نیست")
+		sess.SendError(env.ID, protocol.ErrBadRequest, "the message payload is not valid")
 		return
 	}
 	if err := g.paint.End(sess, req); err != nil {
@@ -66,7 +66,7 @@ func (g *Gateway) handlePaintClear(sess *session.Session, env protocol.Envelope)
 	var req protocol.PaintClear
 	if len(env.Data) > 0 {
 		if err := json.Unmarshal(env.Data, &req); err != nil {
-			sess.SendError(env.ID, protocol.ErrBadRequest, "محتوای پیام معتبر نیست")
+			sess.SendError(env.ID, protocol.ErrBadRequest, "the message payload is not valid")
 			return
 		}
 	}
@@ -91,19 +91,19 @@ func (g *Gateway) handlePaintState(sess *session.Session, env protocol.Envelope)
 func (g *Gateway) replyPaintError(sess *session.Session, id string, err error) {
 	switch {
 	case errors.Is(err, paint.ErrDisabled):
-		sess.SendError(id, protocol.ErrPaintDisabled, "تختهٔ نقاشی در این سرور فعال نیست")
+		sess.SendError(id, protocol.ErrPaintDisabled, "the paint board is not enabled on this server")
 	case errors.Is(err, paint.ErrNotInRoom):
-		sess.SendError(id, protocol.ErrNotInRoom, "برای نقاشی باید داخل یک روم باشید")
+		sess.SendError(id, protocol.ErrNotInRoom, "you must be in a room to draw")
 	case errors.Is(err, paint.ErrForbidden):
-		sess.SendError(id, protocol.ErrForbidden, "اجازهٔ این کار روی تخته را ندارید")
+		sess.SendError(id, protocol.ErrForbidden, "you are not allowed to do that on the board")
 	case errors.Is(err, paint.ErrMuted):
-		sess.SendError(id, protocol.ErrMuted, "شما میوت شده‌اید و نمی‌توانید نقاشی کنید")
+		sess.SendError(id, protocol.ErrMuted, "you are muted and cannot draw")
 	case errors.Is(err, paint.ErrRateLimited):
-		sess.SendError(id, protocol.ErrTooFast, "سرعت ارسال نقاشی بیش از حد مجاز است")
+		sess.SendError(id, protocol.ErrTooFast, "you are drawing faster than allowed")
 	case errors.Is(err, paint.ErrFull):
-		sess.SendError(id, protocol.ErrPaintFull, "تخته پر شده — برای ادامه آن را پاک کنید")
+		sess.SendError(id, protocol.ErrPaintFull, "the board is full - clear it to continue")
 	case errors.Is(err, paint.ErrNotFound), errors.Is(err, paint.ErrNotYours):
-		sess.SendError(id, protocol.ErrPaintNotFound, "این خط روی تخته نیست")
+		sess.SendError(id, protocol.ErrPaintNotFound, "that stroke is not on the board")
 	default:
 		var invalid *paint.ValidationError
 		if errors.As(err, &invalid) {
@@ -111,6 +111,6 @@ func (g *Gateway) replyPaintError(sess *session.Session, id string, err error) {
 			return
 		}
 		slog.Error("paint operation failed", "client_uuid", sess.ClientUUID, "err", err)
-		sess.SendError(id, protocol.ErrInternal, "خطای داخلی سرور")
+		sess.SendError(id, protocol.ErrInternal, "internal server error")
 	}
 }

@@ -16,7 +16,7 @@ var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]
 func NormalizeClientUUID(raw string) (string, error) {
 	id := strings.ToLower(strings.TrimSpace(raw))
 	if !uuidPattern.MatchString(id) {
-		return "", fmt.Errorf("شناسهٔ کلاینت معتبر نیست")
+		return "", fmt.Errorf("the client ID is not valid")
 	}
 	return id, nil
 }
@@ -24,5 +24,5 @@ func NormalizeClientUUID(raw string) (string, error) {
 // NormalizeUsername trims and validates a display name. Names may contain any
 // printable script — Persian included — but no control or bidi trickery.
 func NormalizeUsername(raw string, min, max int) (string, error) {
-	return textutil.NormalizeName(raw, "نام کاربری", min, max)
+	return textutil.NormalizeName(raw, "username", min, max)
 }

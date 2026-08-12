@@ -47,12 +47,12 @@ func TestKickDisconnectsAndAnnounces(t *testing.T) {
 	bob.expect(protocol.TypeUserJoined)
 
 	alice.send(protocol.TypeAdminKick, "k1", protocol.AdminTarget{
-		ClientUUID: uuidB, Reason: "بی‌ادبی",
+		ClientUUID: uuidB, Reason: "rudeness",
 	})
 
 	var event protocol.Moderation
 	bob.decode(bob.expect(protocol.TypeUserKicked), &event)
-	if event.ClientUUID != uuidB || event.ByUUID != uuidA || event.Reason != "بی‌ادبی" {
+	if event.ClientUUID != uuidB || event.ByUUID != uuidA || event.Reason != "rudeness" {
 		t.Fatalf("unexpected kick payload: %+v", event)
 	}
 
@@ -116,7 +116,7 @@ func TestBanBlocksReconnection(t *testing.T) {
 	alice.expect(protocol.TypeUserJoined)
 
 	alice.send(protocol.TypeAdminBan, "b1", protocol.AdminTarget{
-		ClientUUID: uuidB, Reason: "اسپم",
+		ClientUUID: uuidB, Reason: "spam",
 	})
 	bob.expect(protocol.TypeUserBanned)
 	alice.expectFrames(protocol.TypeAdminOK, protocol.TypeUserLeft)
@@ -205,11 +205,11 @@ func TestMuteSilencesWithoutDisconnecting(t *testing.T) {
 	alice.expect(protocol.TypeChatMessage)
 
 	alice.send(protocol.TypeAdminMute, "m1", protocol.AdminTarget{
-		ClientUUID: uuidB, Reason: "شلوغ‌کاری",
+		ClientUUID: uuidB, Reason: "disruption",
 	})
 	var event protocol.Moderation
 	bob.decode(bob.expect(protocol.TypeUserMuted), &event)
-	if event.ClientUUID != uuidB || event.Reason != "شلوغ‌کاری" {
+	if event.ClientUUID != uuidB || event.Reason != "disruption" {
 		t.Fatalf("unexpected mute payload: %+v", event)
 	}
 	alice.expect(protocol.TypeAdminOK)
@@ -291,7 +291,7 @@ func TestRoleLockedRoomRequiresTheRole(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 
-	name := "ویژه"
+	name := "Special"
 	priority := 10
 	perms := authz.PermSendMessages
 	special, err := f.access.CreateRole(ctx, roleSpec(name, priority, perms))
@@ -301,7 +301,7 @@ func TestRoleLockedRoomRequiresTheRole(t *testing.T) {
 
 	alice, _ := f.hello(t, uuidA, "Alice", "")
 	alice.send(protocol.TypeRoomCreate, "c1", protocol.RoomCreate{
-		Name: "اتاق ویژه", RequiredRoleID: special.ID,
+		Name: "Special room", RequiredRoleID: special.ID,
 	})
 	var room protocol.Room
 	alice.decode(alice.expect(protocol.TypeRoomCreated), &room)
@@ -329,7 +329,7 @@ func TestRoomCannotRequireAnUnknownRole(t *testing.T) {
 	alice, _ := f.hello(t, uuidA, "Alice", "")
 
 	alice.send(protocol.TypeRoomCreate, "c1", protocol.RoomCreate{
-		Name: "اتاق", RequiredRoleID: "no-such-role",
+		Name: "Room", RequiredRoleID: "no-such-role",
 	})
 	alice.expectError(protocol.ErrRoleNotFound)
 }
@@ -338,7 +338,7 @@ func TestRoleCrudOverTheWire(t *testing.T) {
 	f := newFixture(t)
 	alice, _ := f.hello(t, uuidA, "Alice", "")
 
-	name := "ناظر"
+	name := "Moderator"
 	priority := 50
 	perms := []string{"moderate_chat", "kick"}
 	alice.send(protocol.TypeAdminRoleCreate, "r1", protocol.RoleSpec{
@@ -346,7 +346,7 @@ func TestRoleCrudOverTheWire(t *testing.T) {
 	})
 	var role protocol.Role
 	alice.decode(alice.expect(protocol.TypeAdminRole), &role)
-	if role.Name != "ناظر" || role.Priority != 50 {
+	if role.Name != "Moderator" || role.Priority != 50 {
 		t.Fatalf("unexpected role: %+v", role)
 	}
 	if len(role.Permissions) != 2 || !hasString(role.Permissions, "kick") {
@@ -374,7 +374,7 @@ func TestRolesCannotBeUsedToEscalate(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 
-	name := "ناظر"
+	name := "Moderator"
 	priority := 10
 	moderator, err := f.access.CreateRole(ctx, roleSpec(name, priority,
 		authz.PermSendMessages|authz.PermManageRoles))
@@ -388,7 +388,7 @@ func TestRolesCannotBeUsedToEscalate(t *testing.T) {
 	bob, _ := f.hello(t, uuidB, "Bob", "")
 
 	// A role at or above one's own rank.
-	tooStrong := "قوی"
+	tooStrong := "Strong"
 	highPriority := 10
 	bob.send(protocol.TypeAdminRoleCreate, "r1", protocol.RoleSpec{
 		Name: &tooStrong, Priority: &highPriority,
@@ -396,7 +396,7 @@ func TestRolesCannotBeUsedToEscalate(t *testing.T) {
 	bob.expectError(protocol.ErrOutranked)
 
 	// A role carrying a permission the creator does not hold.
-	weak := "ضعیف"
+	weak := "Weak"
 	lowPriority := 5
 	perms := []string{"ban"}
 	bob.send(protocol.TypeAdminRoleCreate, "r2", protocol.RoleSpec{
@@ -418,7 +418,7 @@ func TestModerationIsLogged(t *testing.T) {
 	alice.expect(protocol.TypeUserJoined)
 
 	alice.send(protocol.TypeAdminKick, "k1", protocol.AdminTarget{
-		ClientUUID: uuidB, Reason: "تست",
+		ClientUUID: uuidB, Reason: "test",
 	})
 	bob.expect(protocol.TypeUserKicked)
 	alice.expectFrames(protocol.TypeAdminOK, protocol.TypeUserLeft)
@@ -431,7 +431,7 @@ func TestModerationIsLogged(t *testing.T) {
 		t.Fatalf("expected one log entry, got %d", len(entries))
 	}
 	e := entries[0]
-	if e.Action != "kick" || e.ActorUUID != uuidA || e.TargetUUID != uuidB || e.Detail != "تست" {
+	if e.Action != "kick" || e.ActorUUID != uuidA || e.TargetUUID != uuidB || e.Detail != "test" {
 		t.Fatalf("unexpected log entry: %+v", e)
 	}
 }

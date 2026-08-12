@@ -1,8 +1,8 @@
-# TamizChat — بک‌اند
+# TamizChat — backend
 
-بک‌اند self-hosted پروژهٔ TamizChat، نوشته‌شده با Go.
+The self-hosted backend of the TamizChat project, written in Go.
 
-## اجرا
+## Running
 
 ```bash
 go build -o tamizchat ./cmd/tamizchat
@@ -12,61 +12,63 @@ go build -o tamizchat ./cmd/tamizchat
 ./tamizchat run
 ```
 
-سرور روی `:8080` بالا می‌آید و دیتابیس را در `data/tamizchat.db` می‌سازد.
+The server comes up on `:8080` and creates its database at `data/tamizchat.db`.
 
-## پنل مدیریت
+## Admin panel
 
-بدون هیچ آرگومانی، پنل تعاملی باز می‌شود (سبک x-ui):
+With no arguments, the interactive panel opens (x-ui style):
 
 ```bash
 ./tamizchat
 ```
 
-از داخل پنل می‌توانی نام سرور، رمز ورود، پورت، تنظیمات روم‌ها، آپلود، LiveKit و
-سطح لاگ را ببینی و تغییر دهی. هیچ فایل `.env` وجود ندارد؛ همهٔ تنظیمات در همان
-فایل SQLite ذخیره می‌شوند.
+From inside the panel you can view and change the server name, password, port,
+room settings, uploads, LiveKit and the log level. There is no `.env` file;
+every setting lives in the same SQLite file.
 
-> در حال حاضر تغییرات پنل روی سرورِ در حال اجرا پس از ری‌استارت اعمال می‌شود.
-> کنترل زندهٔ سرور در فاز ۱۰ اضافه می‌شود.
+> Panel changes reach a *running* server through the control socket — pick
+> "Running server → Apply changes (reload)", or accept the prompt the panel
+> offers after each edit. `network.listen_addr` is the one exception and still
+> needs a restart.
 
-## پرچم‌ها
+## Flags
 
-| پرچم | پیش‌فرض | توضیح |
-|------|---------|-------|
-| `-db` | `data/tamizchat.db` (یا `TAMIZCHAT_DB`) | مسیر فایل دیتابیس |
-| `-log` | `info` | سطح لاگ اولیه: `debug\|info\|warn\|error` |
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-db` | `data/tamizchat.db` (or `TAMIZCHAT_DB`) | Path to the database file |
+| `-log` | `info` | Initial log level: `debug\|info\|warn\|error` |
 
-## اندپوینت‌های فعلی
+## Current endpoints
 
-| متد | مسیر | توضیح |
-|-----|------|-------|
-| GET | `/healthz` | سلامت سرویس و uptime |
-| GET | `/api/v1/server-info` | اطلاعات عمومی سرور برای کلاینت پیش از اتصال |
-| GET | `/ws` | اتصال WebSocket کلاینت (handshake با پیام `hello`) |
-| POST | `/api/v1/upload` | آپلود فایل با تیکت |
-| GET | `/api/v1/file/{id}` | دانلود فایل با توکن کوتاه‌عمر |
-| GET | `/api/v1/bot-stream/{id}` | فایل موسیقی بات (فقط برای LiveKit Ingress) |
-| POST | `/api/v1/livekit/webhook` | وب‌هوک LiveKit (با تأیید امضا) |
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/healthz` | Service health and uptime |
+| GET | `/api/v1/server-info` | Public server info for the client, before connecting |
+| GET | `/ws` | Client WebSocket connection (handshake with a `hello` message) |
+| POST | `/api/v1/upload` | File upload with a ticket |
+| GET | `/api/v1/file/{id}` | File download with a short-lived token |
+| GET | `/api/v1/bot-stream/{id}` | A bot's music file (for LiveKit Ingress only) |
+| POST | `/api/v1/livekit/webhook` | LiveKit webhook (signature-verified) |
 
-## تست
+## Tests
 
 ```bash
 go test ./...
 ```
 
-## بیلد
+## Build
 
 ```bash
-make build      # باینری برای همین سیستم
-make release    # لینوکس/ویندوز/مک، amd64 و arm64
-make check      # vet + تست
+make build      # binary for this machine
+make release    # linux/windows/macos, amd64 and arm64
+make check      # vet + tests
 ```
 
-## مستندات
+## Documentation
 
-- [راهنمای راه‌اندازی برای اپراتور](docs/DEPLOY.md)
-- [راه‌اندازی LiveKit بدون دامنه و TLS](docs/LIVEKIT.md)
+- [Operator setup guide](docs/DEPLOY.md)
+- [Setting up LiveKit without a domain or TLS](docs/LIVEKIT.md)
 
-- [پروتکل کلاینت ↔ سرور](docs/PROTOCOL.md)
-- [نقشهٔ راه و فازبندی](docs/ROADMAP.md)
-- [حافظهٔ پروژه و تصمیم‌های معماری](MEMORY.md)
+- [Client ↔ server protocol](docs/PROTOCOL.md)
+- [Roadmap and phases](docs/ROADMAP.md)
+- [Project memory and architecture decisions](MEMORY.md)

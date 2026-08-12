@@ -42,7 +42,7 @@ func (g *Gateway) require(sess *session.Session, id string, perm authz.Permissio
 	if g.policy.Can(sess.ClientUUID, perm) {
 		return true
 	}
-	sess.SendError(id, protocol.ErrForbidden, "اجازهٔ این کار را ندارید")
+	sess.SendError(id, protocol.ErrForbidden, "you are not allowed to do that")
 	return false
 }
 
@@ -52,13 +52,13 @@ func (g *Gateway) require(sess *session.Session, id string, perm authz.Permissio
 func (g *Gateway) target(sess *session.Session, env protocol.Envelope) (protocol.AdminTarget, *session.Session, bool) {
 	var req protocol.AdminTarget
 	if err := json.Unmarshal(env.Data, &req); err != nil {
-		sess.SendError(env.ID, protocol.ErrBadRequest, "محتوای پیام معتبر نیست")
+		sess.SendError(env.ID, protocol.ErrBadRequest, "the message payload is not valid")
 		return req, nil, false
 	}
 
 	victim, ok := g.sessions.Get(req.ClientUUID)
 	if !ok {
-		sess.SendError(env.ID, protocol.ErrUserNotFound, "چنین کاربری آنلاین نیست")
+		sess.SendError(env.ID, protocol.ErrUserNotFound, "no such user is online")
 		return req, nil, false
 	}
 	return req, victim, true
@@ -73,11 +73,11 @@ func (g *Gateway) handleAdminKick(ctx context.Context, sess *session.Session, en
 		return
 	}
 	if victim.ClientUUID == sess.ClientUUID {
-		sess.SendError(env.ID, protocol.ErrInvalidInput, "نمی‌توانید خودتان را اخراج کنید")
+		sess.SendError(env.ID, protocol.ErrInvalidInput, "you cannot kick yourself")
 		return
 	}
 	if g.access.OutranksOrEqual(sess.ClientUUID, victim.ClientUUID) {
-		sess.SendError(env.ID, protocol.ErrOutranked, "این کاربر هم‌رتبه یا بالاتر از شماست")
+		sess.SendError(env.ID, protocol.ErrOutranked, "that user ranks equal to or above you")
 		return
 	}
 
@@ -167,7 +167,7 @@ func (g *Gateway) liftSanction(ctx context.Context, sess *session.Session, env p
 
 	var req protocol.AdminTarget
 	if err := json.Unmarshal(env.Data, &req); err != nil {
-		sess.SendError(env.ID, protocol.ErrBadRequest, "محتوای پیام معتبر نیست")
+		sess.SendError(env.ID, protocol.ErrBadRequest, "the message payload is not valid")
 		return
 	}
 
@@ -177,7 +177,7 @@ func (g *Gateway) liftSanction(ctx context.Context, sess *session.Session, env p
 		return
 	}
 	if !removed {
-		sess.SendError(env.ID, protocol.ErrUserNotFound, "چنین محدودیتی برای این کاربر ثبت نشده است")
+		sess.SendError(env.ID, protocol.ErrUserNotFound, "no such sanction is recorded for that user")
 		return
 	}
 
@@ -254,17 +254,17 @@ func (g *Gateway) handleAdminMove(ctx context.Context, sess *session.Session, en
 
 	var req protocol.AdminMove
 	if err := json.Unmarshal(env.Data, &req); err != nil {
-		sess.SendError(env.ID, protocol.ErrBadRequest, "محتوای پیام معتبر نیست")
+		sess.SendError(env.ID, protocol.ErrBadRequest, "the message payload is not valid")
 		return
 	}
 	victim, ok := g.sessions.Get(req.ClientUUID)
 	if !ok {
-		sess.SendError(env.ID, protocol.ErrUserNotFound, "چنین کاربری آنلاین نیست")
+		sess.SendError(env.ID, protocol.ErrUserNotFound, "no such user is online")
 		return
 	}
 	if victim.ClientUUID != sess.ClientUUID &&
 		g.access.OutranksOrEqual(sess.ClientUUID, victim.ClientUUID) {
-		sess.SendError(env.ID, protocol.ErrOutranked, "این کاربر هم‌رتبه یا بالاتر از شماست")
+		sess.SendError(env.ID, protocol.ErrOutranked, "that user ranks equal to or above you")
 		return
 	}
 
@@ -300,7 +300,7 @@ func (g *Gateway) handleAdminMove(ctx context.Context, sess *session.Session, en
 func (g *Gateway) handleAdminSanctions(sess *session.Session, env protocol.Envelope) {
 	if !g.policy.Can(sess.ClientUUID, authz.PermBan) &&
 		!g.policy.Can(sess.ClientUUID, authz.PermMute) {
-		sess.SendError(env.ID, protocol.ErrForbidden, "اجازهٔ این کار را ندارید")
+		sess.SendError(env.ID, protocol.ErrForbidden, "you are not allowed to do that")
 		return
 	}
 
@@ -324,13 +324,13 @@ func (g *Gateway) handleAdminSanctions(sess *session.Session, env protocol.Envel
 func (g *Gateway) replyAccessError(sess *session.Session, id string, err error) {
 	switch {
 	case errors.Is(err, access.ErrOutranked):
-		sess.SendError(id, protocol.ErrOutranked, "این کاربر هم‌رتبه یا بالاتر از شماست")
+		sess.SendError(id, protocol.ErrOutranked, "that user ranks equal to or above you")
 	case errors.Is(err, access.ErrRoleNotFound):
-		sess.SendError(id, protocol.ErrRoleNotFound, "چنین رولی وجود ندارد")
+		sess.SendError(id, protocol.ErrRoleNotFound, "no such role exists")
 	case errors.Is(err, access.ErrRoleNameTaken):
-		sess.SendError(id, protocol.ErrRoleNameTaken, "رولی با این نام وجود دارد")
+		sess.SendError(id, protocol.ErrRoleNameTaken, "a role with that name already exists")
 	case errors.Is(err, access.ErrRoleProtected):
-		sess.SendError(id, protocol.ErrRoleProtected, "این رول داخلی است و حذف نمی‌شود")
+		sess.SendError(id, protocol.ErrRoleProtected, "that is a built-in role and cannot be deleted")
 	default:
 		var invalid *access.ValidationError
 		if errors.As(err, &invalid) {
@@ -338,6 +338,6 @@ func (g *Gateway) replyAccessError(sess *session.Session, id string, err error) 
 			return
 		}
 		slog.Error("admin action failed", "client_uuid", sess.ClientUUID, "err", err)
-		sess.SendError(id, protocol.ErrInternal, "خطای داخلی سرور")
+		sess.SendError(id, protocol.ErrInternal, "internal server error")
 	}
 }

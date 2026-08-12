@@ -190,7 +190,7 @@ func (m *Manager) Count() int {
 
 // Create adds a room and announces it to everyone.
 func (m *Manager) Create(ctx context.Context, actorUUID string, req protocol.RoomCreate) (*Room, error) {
-	name, err := textutil.NormalizeName(req.Name, "نام روم", RoomNameMinLen, RoomNameMaxLen)
+	name, err := textutil.NormalizeName(req.Name, "room name", RoomNameMinLen, RoomNameMaxLen)
 	if err != nil {
 		return nil, invalid(err)
 	}
@@ -254,7 +254,7 @@ func (m *Manager) Update(ctx context.Context, actorUUID string, req protocol.Roo
 
 	def := room.Definition()
 	if req.Name != nil {
-		name, err := textutil.NormalizeName(*req.Name, "نام روم", RoomNameMinLen, RoomNameMaxLen)
+		name, err := textutil.NormalizeName(*req.Name, "room name", RoomNameMinLen, RoomNameMaxLen)
 		if err != nil {
 			return nil, invalid(err)
 		}
@@ -271,7 +271,7 @@ func (m *Manager) Update(ctx context.Context, actorUUID string, req protocol.Roo
 	}
 	if req.Capacity != nil {
 		if *req.Capacity < 1 {
-			return nil, invalid(errors.New("ظرفیت روم باید حداقل ۱ باشد"))
+			return nil, invalid(errors.New("room capacity must be at least 1"))
 		}
 		// Lowering the capacity below the current headcount is allowed: nobody
 		// is thrown out, the room simply stops accepting newcomers.

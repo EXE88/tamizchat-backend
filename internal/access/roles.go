@@ -21,7 +21,7 @@ type RoleSpec struct {
 // CreateRole defines a new role.
 func (m *Manager) CreateRole(ctx context.Context, spec RoleSpec) (storage.Role, error) {
 	if spec.Name == nil {
-		return storage.Role{}, &ValidationError{Msg: "نام رول لازم است"}
+		return storage.Role{}, &ValidationError{Msg: "the role name is required"}
 	}
 	name, err := normalizeRoleName(*spec.Name)
 	if err != nil {
