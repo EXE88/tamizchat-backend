@@ -43,6 +43,10 @@ go build -o tamizchat ./cmd/tamizchat
 | GET | `/healthz` | سلامت سرویس و uptime |
 | GET | `/api/v1/server-info` | اطلاعات عمومی سرور برای کلاینت پیش از اتصال |
 | GET | `/ws` | اتصال WebSocket کلاینت (handshake با پیام `hello`) |
+| POST | `/api/v1/upload` | آپلود فایل با تیکت |
+| GET | `/api/v1/file/{id}` | دانلود فایل با توکن کوتاه‌عمر |
+| GET | `/api/v1/bot-stream/{id}` | فایل موسیقی بات (فقط برای LiveKit Ingress) |
+| POST | `/api/v1/livekit/webhook` | وب‌هوک LiveKit (با تأیید امضا) |
 
 ## تست
 
@@ -50,7 +54,17 @@ go build -o tamizchat ./cmd/tamizchat
 go test ./...
 ```
 
+## بیلد
+
+```bash
+make build      # باینری برای همین سیستم
+make release    # لینوکس/ویندوز/مک، amd64 و arm64
+make check      # vet + تست
+```
+
 ## مستندات
+
+- [راهنمای راه‌اندازی برای اپراتور](docs/DEPLOY.md)
 
 - [پروتکل کلاینت ↔ سرور](docs/PROTOCOL.md)
 - [نقشهٔ راه و فازبندی](docs/ROADMAP.md)

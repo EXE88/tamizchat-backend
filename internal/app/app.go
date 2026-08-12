@@ -3,11 +3,14 @@ package app
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -15,8 +18,10 @@ import (
 	"tamizchat/internal/bots"
 	"tamizchat/internal/chat"
 	"tamizchat/internal/config"
+	"tamizchat/internal/control"
 	"tamizchat/internal/files"
 	"tamizchat/internal/gateway"
+	"tamizchat/internal/guard"
 	"tamizchat/internal/httpapi"
 	"tamizchat/internal/logging"
 	"tamizchat/internal/media"
@@ -67,6 +72,7 @@ func Run(ctx context.Context, opts Options) error {
 		return err
 	}
 
+	startedAt := time.Now()
 	sessions := session.NewManager(func() int { return cfg.Int(config.KeyServerMaxUsers) })
 	roomMgr, err := rooms.NewManager(ctx, store, cfg, sessions, accessMgr)
 	if err != nil {
@@ -94,13 +100,25 @@ func Run(ctx context.Context, opts Options) error {
 	// pointing at a room nobody can join.
 	roomMgr.OnDelete(botMgr.RoomGone)
 
+	proxies, err := httpapi.ParseTrustedProxies(cfg.String(config.KeyTrustedProxies))
+	if err != nil {
+		return fmt.Errorf("trusted proxies: %w", err)
+	}
+	entryGuard := guard.New(func() guard.Limits {
+		return guard.Limits{
+			MaxPerIP:  cfg.Int(config.KeyMaxConnsPerIP),
+			Burst:     cfg.Int(config.KeyHandshakeBurst),
+			PerMinute: cfg.Int(config.KeyHandshakePerMinute),
+		}
+	})
+
 	gw := gateway.New(cfg, sessions, roomMgr, chatMgr, fileMgr, mediaMgr,
-		paintMgr, botMgr, accessMgr, store, serverUUID)
+		paintMgr, botMgr, accessMgr, entryGuard, proxies, store, serverUUID)
 
 	handler := httpapi.Handler(httpapi.Deps{
 		Config:      cfg,
 		ServerUUID:  serverUUID,
-		StartedAt:   time.Now(),
+		StartedAt:   startedAt,
 		OnlineUsers: sessions.Count,
 		Gateway:     gw,
 		Files:       fileMgr,
@@ -120,21 +138,44 @@ func Run(ctx context.Context, opts Options) error {
 		IdleTimeout:       120 * time.Second,
 	}
 
+	ctrl, err := control.Listen(opts.DBPath, controlHandler{
+		cfg:       cfg,
+		sessions:  sessions,
+		rooms:     roomMgr,
+		access:    accessMgr,
+		bots:      botMgr,
+		media:     mediaMgr,
+		startedAt: startedAt,
+		pid:       os.Getpid(),
+		onRoles:   gw.RefreshRoles,
+	})
+	if err != nil {
+		return err
+	}
+	defer ctrl.Close()
+
 	slog.Info("tamizchat starting",
 		"version", version.Version,
 		"addr", addr,
+		"tls", cfg.Bool(config.KeyTLSEnabled),
 		"db", store.Path(),
 		"server_uuid", serverUUID,
 		"name", cfg.String(config.KeyServerName),
 	)
 
+	// The guard remembers a rate bucket per address; without a sweep a
+	// long-running server slowly accumulates one for every address it has met.
+	sweeper := time.NewTicker(10 * time.Minute)
+	defer sweeper.Stop()
+	go func() {
+		for range sweeper.C {
+			entryGuard.Sweep()
+		}
+	}()
+
 	errCh := make(chan error, 1)
 	go func() {
-		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			errCh <- fmt.Errorf("listen on %s: %w", addr, err)
-			return
-		}
-		errCh <- nil
+		errCh <- serve(srv, cfg)
 	}()
 
 	select {
@@ -154,5 +195,35 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("graceful shutdown: %w", err)
 	}
 	slog.Info("stopped")
+	return nil
+}
+
+// serve starts the listener, with TLS when it is configured.
+//
+// TLS is optional on purpose: most operators put this behind nginx or Caddy,
+// which already terminate TLS and renew certificates. Building it in is for the
+// case where there is nothing in front.
+func serve(srv *http.Server, cfg *config.Config) error {
+	var err error
+	if cfg.Bool(config.KeyTLSEnabled) {
+		cert := strings.TrimSpace(cfg.String(config.KeyTLSCertFile))
+		key := strings.TrimSpace(cfg.String(config.KeyTLSKeyFile))
+		if cert == "" || key == "" {
+			return errors.New("TLS روشن است ولی مسیر گواهی یا کلید تنظیم نشده")
+		}
+		if _, statErr := tls.LoadX509KeyPair(cert, key); statErr != nil {
+			return fmt.Errorf("گواهی TLS خوانده نشد: %w", statErr)
+		}
+		// Anything older than TLS 1.2 is broken; there is no client that needs
+		// it and every reason not to offer it.
+		srv.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+		err = srv.ListenAndServeTLS(cert, key)
+	} else {
+		err = srv.ListenAndServe()
+	}
+
+	if err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return fmt.Errorf("listen on %s: %w", srv.Addr, err)
+	}
 	return nil
 }

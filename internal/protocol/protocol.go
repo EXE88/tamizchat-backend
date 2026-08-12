@@ -124,6 +124,8 @@ const (
 
 	TypeBots     = "bot.list"
 	TypeBotState = "bot.state"
+
+	TypeServerNotice = "server.notice"
 )
 
 // Error codes. The client shows its own localized text per code, so these
@@ -471,6 +473,13 @@ type Bot struct {
 	Loop       bool      `json:"loop"`
 	Shuffle    bool      `json:"shuffle"`
 	Enabled    bool      `json:"enabled"`
+}
+
+// ServerNotice is a message from the server operator to everyone connected.
+// It is not a chat message: it belongs to no room and is never stored.
+type ServerNotice struct {
+	Text string `json:"text"`
+	From string `json:"from,omitempty"`
 }
 
 // BotList is the reply to bot.list.

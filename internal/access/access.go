@@ -125,6 +125,22 @@ func (m *Manager) seed(ctx context.Context) error {
 	return nil
 }
 
+// Reload replaces the in-memory view from the database, so roles and bans the
+// admin panel wrote reach a running server without a restart. It returns the
+// number of roles now defined.
+func (m *Manager) Reload(ctx context.Context) (int, error) {
+	if _, err := m.store.PurgeExpiredSanctions(ctx); err != nil {
+		return 0, err
+	}
+	if err := m.reload(ctx); err != nil {
+		return 0, err
+	}
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return len(m.roles), nil
+}
+
 // reload replaces the in-memory view from the database.
 func (m *Manager) reload(ctx context.Context) error {
 	roles, err := m.store.ListRoles(ctx)

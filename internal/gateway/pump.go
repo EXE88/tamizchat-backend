@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"runtime/debug"
 	"time"
 
 	"github.com/coder/websocket"
@@ -79,7 +80,19 @@ func (g *Gateway) readPump(ctx context.Context, conn *websocket.Conn, sess *sess
 }
 
 // dispatch routes one decoded frame to its handler.
+//
+// A panic in a handler is contained here. Without this, one malformed frame
+// from one client would take down the whole server — every other conversation
+// with it — which is a far worse outcome than one client seeing an error.
 func (g *Gateway) dispatch(ctx context.Context, sess *session.Session, data []byte) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("recovered from a panic while handling a frame",
+				"client_uuid", sess.ClientUUID, "panic", r, "stack", string(debug.Stack()))
+			sess.SendError("", protocol.ErrInternal, "خطای داخلی سرور")
+		}
+	}()
+
 	var env protocol.Envelope
 	if err := json.Unmarshal(data, &env); err != nil {
 		sess.SendError("", protocol.ErrBadRequest, "قالب پیام معتبر نیست")

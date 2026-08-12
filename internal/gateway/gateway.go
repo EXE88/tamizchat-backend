@@ -20,6 +20,8 @@ import (
 	"tamizchat/internal/chat"
 	"tamizchat/internal/config"
 	"tamizchat/internal/files"
+	"tamizchat/internal/guard"
+	"tamizchat/internal/httpapi"
 	"tamizchat/internal/media"
 	"tamizchat/internal/paint"
 	"tamizchat/internal/protocol"
@@ -57,6 +59,8 @@ type Gateway struct {
 	paint    *paint.Manager
 	bots     *bots.Manager
 	access   *access.Manager
+	guard    *guard.Guard
+	proxies  *httpapi.TrustedProxies
 	users    Users
 	policy   authz.Policy
 	serverID string
@@ -67,7 +71,8 @@ type Gateway struct {
 func New(cfg *config.Config, sessions *session.Manager, roomMgr *rooms.Manager,
 	chatMgr *chat.Manager, fileMgr *files.Manager, mediaMgr *media.Manager,
 	paintMgr *paint.Manager, botMgr *bots.Manager, accessMgr *access.Manager,
-	users Users, serverUUID string) *Gateway {
+	entryGuard *guard.Guard, proxies *httpapi.TrustedProxies, users Users,
+	serverUUID string) *Gateway {
 	return &Gateway{
 		cfg:      cfg,
 		sessions: sessions,
@@ -78,6 +83,8 @@ func New(cfg *config.Config, sessions *session.Manager, roomMgr *rooms.Manager,
 		paint:    paintMgr,
 		bots:     botMgr,
 		access:   accessMgr,
+		guard:    entryGuard,
+		proxies:  proxies,
 		users:    users,
 		policy:   accessMgr,
 		serverID: serverUUID,
@@ -86,6 +93,17 @@ func New(cfg *config.Config, sessions *session.Manager, roomMgr *rooms.Manager,
 
 // ServeHTTP upgrades the request and runs the connection until it ends.
 func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// The address is checked before the upgrade, so a flood costs the server a
+	// rejected HTTP request rather than a WebSocket connection.
+	remote := g.remoteAddr(r)
+	release, err := g.guard.Admit(remote)
+	if err != nil {
+		slog.Debug("connection refused by the guard", "remote", remote, "err", err)
+		http.Error(w, "too many connections", http.StatusTooManyRequests)
+		return
+	}
+	defer release()
+
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		// The desktop client is not a browser, so there is no meaningful Origin
 		// to check and no cookie-based authority to protect against CSRF.
@@ -99,7 +117,7 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	conn.SetReadLimit(readLimit)
 
 	ctx := r.Context()
-	sess, err := g.handshake(ctx, conn, r.RemoteAddr)
+	sess, err := g.handshake(ctx, conn, remote)
 	if err != nil {
 		// handshake already reported the reason to the client.
 		slog.Debug("handshake rejected", "err", err, "remote", r.RemoteAddr)
@@ -226,6 +244,15 @@ func (g *Gateway) handshake(ctx context.Context, conn *websocket.Conn, remote st
 	}
 
 	return sess, nil
+}
+
+// remoteAddr is the address to hold responsible for this request, which behind
+// a trusted proxy is the client's rather than the proxy's.
+func (g *Gateway) remoteAddr(r *http.Request) string {
+	if g.proxies != nil {
+		return g.proxies.ClientIP(r)
+	}
+	return r.RemoteAddr
 }
 
 // reject reports a handshake failure to the client and closes the socket.

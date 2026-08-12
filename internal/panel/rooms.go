@@ -91,7 +91,7 @@ func (p *Panel) createRoom(ctx context.Context) {
 		p.warn("خطا: " + err.Error())
 		return
 	}
-	p.ok("روم ساخته شد — برای دیده‌شدن در سرورِ در حال اجرا، سرور را ری‌استارت کنید")
+	p.okLive("روم ساخته شد")
 }
 
 func (p *Panel) editRoom(ctx context.Context, list []storage.Room) {
@@ -130,7 +130,7 @@ func (p *Panel) editRoom(ctx context.Context, list []storage.Room) {
 		p.warn("خطا: " + err.Error())
 		return
 	}
-	p.ok("ذخیره شد — روی سرورِ در حال اجرا پس از ری‌استارت اعمال می‌شود")
+	p.okLive("ذخیره شد")
 }
 
 func (p *Panel) deleteRoom(ctx context.Context, list []storage.Room) {
@@ -147,7 +147,7 @@ func (p *Panel) deleteRoom(ctx context.Context, list []storage.Room) {
 		p.warn("خطا: " + err.Error())
 		return
 	}
-	p.ok("روم حذف شد")
+	p.okLive("روم حذف شد")
 }
 
 // pickRoom asks for a row number from the listing.

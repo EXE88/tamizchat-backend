@@ -14,6 +14,7 @@ import (
 
 	"tamizchat/internal/access"
 	"tamizchat/internal/config"
+	"tamizchat/internal/control"
 	"tamizchat/internal/storage"
 	"tamizchat/internal/version"
 )
@@ -23,8 +24,11 @@ type Panel struct {
 	store  *storage.Store
 	cfg    *config.Config
 	access *access.Manager
-	in     *bufio.Reader
-	out    *bufio.Writer
+	// control talks to the server process if one is running, which is what
+	// lets a change here take effect without a restart.
+	control *control.Client
+	in      *bufio.Reader
+	out     *bufio.Writer
 }
 
 // Run opens the database and drives the menu loop until the user exits.
@@ -46,11 +50,12 @@ func Run(ctx context.Context, dbPath string) error {
 	}
 
 	p := &Panel{
-		store:  store,
-		cfg:    cfg,
-		access: accessMgr,
-		in:     bufio.NewReader(os.Stdin),
-		out:    bufio.NewWriter(os.Stdout),
+		store:   store,
+		cfg:     cfg,
+		access:  accessMgr,
+		control: control.NewClient(dbPath),
+		in:      bufio.NewReader(os.Stdin),
+		out:     bufio.NewWriter(os.Stdout),
 	}
 	defer p.out.Flush()
 	return p.mainMenu(ctx)
@@ -95,6 +100,12 @@ func (p *Panel) mainMenu(ctx context.Context) error {
 			p.showModLog(ctx)
 		case "10":
 			p.botsMenu(ctx)
+		case "11":
+			p.liveMenu()
+		case "12":
+			p.serviceMenu()
+		case "13":
+			p.backupMenu(ctx)
 		case "0", "q", "exit":
 			p.println("")
 			return nil
@@ -237,11 +248,27 @@ func (p *Panel) editSetting(ctx context.Context, s config.Setting) {
 		p.warn("خطا: " + err.Error())
 		return
 	}
-	p.ok("ذخیره شد")
 	if s.Key == config.KeyListenAddr {
-		p.warn("این تنظیم پس از ری‌استارت سرور اعمال می‌شود")
+		// The listener is bound once at startup; nothing short of a restart
+		// can move it.
+		p.ok("ذخیره شد — این تنظیم فقط با ری‌استارت سرور اعمال می‌شود")
+		return
 	}
+	p.saved("ذخیره شد")
 }
+
+// saved reports a change and, when a server is running, offers to make it take
+// effect immediately. Every panel edit writes to the database first, so
+// declining just means it waits for the next restart.
+func (p *Panel) saved(message string) {
+	p.println("")
+	p.printf("  %s\n", green("✓ "+message))
+	p.offerReload()
+	p.pause()
+}
+
+// okLive is saved() under the name the other menus call it by.
+func (p *Panel) okLive(message string) { p.saved(message) }
 
 func (p *Panel) showAll() {
 	p.clear()
@@ -293,6 +320,10 @@ func sectionTitle(section string) string {
 		return "چت"
 	case "paint":
 		return "تختهٔ نقاشی"
+	case "tls":
+		return "TLS"
+	case "backup":
+		return "بکاپ"
 	case "uploads":
 		return "فایل و عکس"
 	case "livekit":

@@ -106,7 +106,7 @@ func (p *Panel) createBot(ctx context.Context) {
 		p.warn("خطا: " + err.Error())
 		return
 	}
-	p.ok("بات ساخته شد — برای دیده‌شدن در سرورِ در حال اجرا، سرور را ری‌استارت کنید")
+	p.okLive("بات ساخته شد")
 }
 
 func (p *Panel) editBot(ctx context.Context, list []storage.Bot) {
@@ -155,7 +155,7 @@ func (p *Panel) editBot(ctx context.Context, list []storage.Bot) {
 		p.warn("خطا: " + err.Error())
 		return
 	}
-	p.ok("ذخیره شد — روی سرورِ در حال اجرا پس از ری‌استارت اعمال می‌شود")
+	p.okLive("ذخیره شد")
 }
 
 func (p *Panel) deleteBot(ctx context.Context, list []storage.Bot) {
@@ -171,7 +171,7 @@ func (p *Panel) deleteBot(ctx context.Context, list []storage.Bot) {
 		p.warn("خطا: " + err.Error())
 		return
 	}
-	p.ok("بات حذف شد")
+	p.okLive("بات حذف شد")
 }
 
 func (p *Panel) pickBot(prompt string, list []storage.Bot) (storage.Bot, bool) {

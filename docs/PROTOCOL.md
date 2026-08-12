@@ -151,6 +151,7 @@
 | `paint.state` | `{"room_id", "strokes": [Stroke], "max_strokes"}` |
 | `bot.list` | `{"bots": [Bot]}` |
 | `bot.state` | یک Bot — هر بار که وضعیت بات عوض شود |
+| `server.notice` | `{"text", "from"}` — اعلان از سمت اپراتور سرور |
 
 قالب `Room`:
 

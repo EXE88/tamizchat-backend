@@ -80,7 +80,7 @@ func Handler(d Deps) http.Handler {
 		mux.HandleFunc("POST /api/v1/livekit/webhook", d.handleLiveKitWebhook)
 	}
 
-	return logRequests(mux)
+	return recoverPanics(secureHeaders(logRequests(mux)))
 }
 
 // ProtocolVersion is bumped whenever the client/server wire contract changes in

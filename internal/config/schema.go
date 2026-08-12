@@ -35,7 +35,8 @@ type Setting struct {
 }
 
 // Sections in the order the admin panel should show them.
-var Sections = []string{"server", "network", "users", "rooms", "chat", "uploads", "paint", "livekit", "log"}
+var Sections = []string{"server", "network", "tls", "users", "rooms", "chat",
+	"uploads", "paint", "livekit", "backup", "log"}
 
 var registry = buildRegistry(
 	Setting{
@@ -71,6 +72,52 @@ var registry = buildRegistry(
 		Key: KeyHeartbeatSec, Section: "network", Kind: KindInt, Default: "30",
 		Title: "فاصلهٔ ضربان (ثانیه)", Help: "هر چند ثانیه سرور کلاینت را ping کند تا اتصال‌های مرده تشخیص داده شوند.",
 		Validate: intRange(5, 600),
+	},
+
+	Setting{
+		Key: KeyMaxConnsPerIP, Section: "network", Kind: KindInt, Default: "8",
+		Title: "حداکثر اتصال هر آی‌پی", Help: "صفر یعنی بدون محدودیت — برای وقتی همه پشت یک NAT هستند.",
+		Validate: intRange(0, 10000),
+	},
+	Setting{
+		Key: KeyHandshakePerMinute, Section: "network", Kind: KindInt, Default: "60",
+		Title: "سقف اتصال جدید در دقیقه", Help: "برای هر آی‌پی؛ جلوی سیل اتصال را می‌گیرد.",
+		Validate: intRange(1, 10000),
+	},
+	Setting{
+		Key: KeyHandshakeBurst, Section: "network", Kind: KindInt, Default: "15",
+		Title: "اتصال پشت‌سرهم مجاز", Help: "کلاینتی که چند روم را سریع عوض می‌کند نباید بلوکه شود.",
+		Validate: intRange(1, 1000),
+	},
+	Setting{
+		Key: KeyTrustedProxies, Section: "network", Kind: KindString, Default: "",
+		Title:    "پروکسی‌های مورد اعتماد",
+		Help:     "فهرست آی‌پی یا CIDR با کاما. فقط از این آدرس‌ها هدر X-Forwarded-For باور می‌شود.",
+		Validate: validTrustedProxies,
+	},
+
+	Setting{
+		Key: KeyTLSEnabled, Section: "tls", Kind: KindBool, Default: "false",
+		Title: "فعال بودن TLS", Help: "اگر پشت nginx یا Caddy هستید، خاموش بگذارید و TLS را آن‌ها انجام دهند.",
+	},
+	Setting{
+		Key: KeyTLSCertFile, Section: "tls", Kind: KindString, Default: "",
+		Title: "فایل گواهی (fullchain)", Help: "مسیر فایل PEM شامل گواهی و زنجیرهٔ آن.",
+	},
+	Setting{
+		Key: KeyTLSKeyFile, Section: "tls", Kind: KindString, Default: "",
+		Title: "فایل کلید خصوصی", Help: "مسیر فایل PEM کلید خصوصی.",
+	},
+
+	Setting{
+		Key: KeyBackupDir, Section: "backup", Kind: KindString, Default: "data/backups",
+		Title: "مسیر بکاپ‌ها", Help: "بکاپ دیتابیس از پنل در این پوشه ساخته می‌شود.",
+		Validate: notEmpty,
+	},
+	Setting{
+		Key: KeyBackupKeep, Section: "backup", Kind: KindInt, Default: "10",
+		Title: "تعداد بکاپ نگه‌داشته‌شده", Help: "قدیمی‌ترها پس از هر بکاپ تازه حذف می‌شوند.",
+		Validate: intRange(1, 1000),
 	},
 
 	Setting{
@@ -214,6 +261,18 @@ const (
 	KeyPublicHost   = "network.public_host"
 	KeyHeartbeatSec = "network.heartbeat_sec"
 
+	KeyMaxConnsPerIP      = "network.max_conns_per_ip"
+	KeyHandshakePerMinute = "network.handshake_per_minute"
+	KeyHandshakeBurst     = "network.handshake_burst"
+	KeyTrustedProxies     = "network.trusted_proxies"
+
+	KeyTLSEnabled  = "tls.enabled"
+	KeyTLSCertFile = "tls.cert_file"
+	KeyTLSKeyFile  = "tls.key_file"
+
+	KeyBackupDir  = "backup.dir"
+	KeyBackupKeep = "backup.keep"
+
 	KeyUsernameMinLen = "users.username_min_len"
 	KeyUsernameMaxLen = "users.username_max_len"
 
@@ -331,6 +390,25 @@ func intRange(min, max int) func(string) error {
 		}
 		return nil
 	}
+}
+
+// validTrustedProxies keeps a typo out of the security-relevant list: an
+// unparseable entry would silently be ignored, quietly widening what the server
+// believes.
+func validTrustedProxies(v string) error {
+	for _, entry := range strings.Split(v, ",") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		if _, _, err := net.ParseCIDR(entry); err == nil {
+			continue
+		}
+		if net.ParseIP(entry) == nil {
+			return fmt.Errorf("«%s» نه آی‌پی است نه CIDR", entry)
+		}
+	}
+	return nil
 }
 
 func validListenAddr(v string) error {

@@ -218,6 +218,11 @@ func (g *Gateway) announceRoles(clientUUID string) {
 	}
 }
 
+// RefreshRoles re-caches every connected user's roles and mute state. The
+// control channel calls it after a reload, so a role granted from the admin
+// panel reaches people who are already connected.
+func (g *Gateway) RefreshRoles() { g.refreshRoles() }
+
 // refreshRoles re-caches every connected user's roles, used after a role
 // definition changed in a way that affects who holds what.
 func (g *Gateway) refreshRoles() {

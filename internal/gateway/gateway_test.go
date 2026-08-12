@@ -20,6 +20,7 @@ import (
 	"tamizchat/internal/config"
 	"tamizchat/internal/files"
 	"tamizchat/internal/gateway"
+	"tamizchat/internal/guard"
 	"tamizchat/internal/httpapi"
 	"tamizchat/internal/media"
 	"tamizchat/internal/paint"
@@ -114,8 +115,20 @@ func newFixture(t *testing.T) *fixture {
 	}
 	roomMgr.OnDelete(botMgr.RoomGone)
 
+	proxies, err := httpapi.ParseTrustedProxies("")
+	if err != nil {
+		t.Fatalf("trusted proxies: %v", err)
+	}
+	entryGuard := guard.New(func() guard.Limits {
+		return guard.Limits{
+			MaxPerIP:  cfg.Int(config.KeyMaxConnsPerIP),
+			Burst:     cfg.Int(config.KeyHandshakeBurst),
+			PerMinute: cfg.Int(config.KeyHandshakePerMinute),
+		}
+	})
+
 	gw := gateway.New(cfg, sessions, roomMgr, chatMgr, fileMgr, mediaMgr,
-		paintMgr, botMgr, accessMgr, store, "server-uuid")
+		paintMgr, botMgr, accessMgr, entryGuard, proxies, store, "server-uuid")
 
 	// The tests drive the real HTTP surface, so the upload and download routes
 	// are exercised exactly as a client would reach them.

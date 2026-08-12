@@ -52,6 +52,55 @@ func Load(ctx context.Context, store SettingsStore) (*Config, error) {
 	return &Config{store: store, values: values}, nil
 }
 
+// Reload re-reads every setting from the database and publishes what changed.
+// It is how an edit made by the admin panel — which writes straight to the
+// database — reaches a server that is already running.
+//
+// It returns the number of values that actually changed, so the panel can say
+// what happened rather than just "done".
+func (c *Config) Reload(ctx context.Context) (int, error) {
+	saved, err := c.store.LoadSettings(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	fresh := make(map[string]string, len(registry))
+	for _, s := range registry {
+		fresh[s.Key] = s.Default
+	}
+	for k, v := range saved {
+		s, ok := Lookup(k)
+		if !ok {
+			continue
+		}
+		if err := s.check(v); err != nil {
+			// One bad row must not take the whole configuration down: keep the
+			// value that is already running and report it.
+			return 0, fmt.Errorf("مقدار ذخیره‌شدهٔ نامعتبر: %w", err)
+		}
+		fresh[k] = v
+	}
+
+	c.mu.Lock()
+	type change struct{ key, value string }
+	var changed []change
+	for key, value := range fresh {
+		if c.values[key] != value {
+			changed = append(changed, change{key, value})
+		}
+	}
+	c.values = fresh
+	watchers := append([]func(string, string){}, c.watchers...)
+	c.mu.Unlock()
+
+	for _, ch := range changed {
+		for _, w := range watchers {
+			w(ch.key, ch.value)
+		}
+	}
+	return len(changed), nil
+}
+
 // Set validates, persists, and publishes a new value for key.
 func (c *Config) Set(ctx context.Context, key, value string) error {
 	s, ok := Lookup(key)
