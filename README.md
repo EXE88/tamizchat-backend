@@ -65,6 +65,7 @@ make check      # vet + تست
 ## مستندات
 
 - [راهنمای راه‌اندازی برای اپراتور](docs/DEPLOY.md)
+- [راه‌اندازی LiveKit بدون دامنه و TLS](docs/LIVEKIT.md)
 
 - [پروتکل کلاینت ↔ سرور](docs/PROTOCOL.md)
 - [نقشهٔ راه و فازبندی](docs/ROADMAP.md)
