@@ -127,6 +127,9 @@ func Run(ctx context.Context, opts Options) error {
 		},
 		OnUpload: gw.AnnounceUpload,
 		Bots:     botMgr,
+		MaxTrackBytes: func() int64 {
+			return int64(cfg.Int(config.KeyBotsMaxTrackMB)) << 20
+		},
 		Webhooks: webhookRouter{media: mediaMgr, bots: botMgr},
 	})
 

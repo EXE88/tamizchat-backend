@@ -149,6 +149,9 @@ func newFixture(t *testing.T) *fixture {
 		},
 		OnUpload: gw.AnnounceUpload,
 		Bots:     botMgr,
+		MaxTrackBytes: func() int64 {
+			return int64(cfg.Int(config.KeyBotsMaxTrackMB)) << 20
+		},
 		Webhooks: webhookVerifier{media: mediaMgr, bots: botMgr},
 	}))
 	t.Cleanup(srv.Close)

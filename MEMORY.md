@@ -54,7 +54,7 @@ played on ban, microphone and listening settings, key bindings for shortcuts.
 
 ## Current status
 
-**All 11 backend phases are done and tested** (229 tests, all green), plus the
+**All 11 backend phases are done and tested** (235 tests, all green), plus the
 post-roadmap work the client's admin panel needs — see "Work added after phase
 11" below.
 The backend is complete as far as the roadmap goes; the project's next step is
@@ -369,15 +369,38 @@ things the wire did not have. Added since:
   - Disabling a bot stops it. A switch that says "off" while the room still hears
     music is a bug, so `Update` routes through `stop` when `enabled` goes false.
   - `bots.dir` is a new setting in a new `bots` config section.
+- **Bot playlists** (migration 0011: `bot_playlists` + `bots.playlist_id`) —
+  named playlists per bot, filled by upload from the client.
+  - **Layout:** `<bots.dir>/<bot id>/default` is the bot's own library and
+    `<bots.dir>/<bot id>/<playlist id>` is a playlist. The library is a folder
+    *beside* the playlists, never above them — `scanFolder` walks subfolders, so
+    a nested playlist would be played twice. This was a real bug, caught by a
+    test, before the layout changed.
+  - Playlists always live under the server's own storage, even for a bot whose
+    `folder` an operator typed in. We do not create folders inside somebody
+    else's music directory.
+  - Upload reuses the phase-6 pattern — permission over the socket, bytes over
+    HTTP (`POST /api/v1/bot-track?token=`), single-use ticket. Unlike a room
+    file, a track **keeps its file name**, because the queue is the folder
+    listing and the title is that name; so the name is sanitized, must end in an
+    accepted audio extension, and collides into "name (2).mp3".
+  - This music is permanent, so it has its own quota: `bots.quota_mb` per bot
+    and `bots.max_track_mb` per track.
+  - Selecting or deleting a playlist stops playback: the queue becomes a
+    different list, and an index carried across it lands on an unrelated track.
+  - The upload ticket carries the uploader's UUID purely so the actor can be
+    left out of the `bot.state` broadcast — the same rule as everywhere else.
+  - `bot.queue` finally exists on the wire; `Manager.Queue` had been unreachable
+    since phase 9.
+  - Playlists are managed from the client only. The CLI panel still owns
+    folder-based bots and was deliberately left alone.
 
 ## Final backend status
 
 Work that was deliberately deferred is listed at the end of `docs/ROADMAP.md`
 (reply, server-side stickers, real bot pause, more webhooks, race in CI).
-Bot **playlists** — named playlists per bot with client-side upload — are the
-next backend piece the client needs, and should reuse the phase-6 "permission
-over the socket, bytes over HTTP" ticket pattern rather than invent a second
-upload path.
+The backend now has everything the client's admin panel asked for; the
+remaining work on the bots feature is the **Bots tab in the WinUI client**.
 
 ## Next step
 

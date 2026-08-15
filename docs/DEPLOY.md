@@ -133,11 +133,27 @@ publish audio.
    `https://chat.example.com`. Ingress has to fetch the music file from your
    server, and the server cannot guess what address it is reachable at from
    outside.
-4. Create the bot from **panel option 10** with a name and a music folder path.
-   The panel tells you right there how many playable files it found.
+4. Create the bot. Either from **panel option 10**, with a name and a music
+   folder path — the panel tells you right there how many playable files it
+   found — or from the client, by an administrator holding `manage_bots`.
 
 The file format does not matter (mp3, ogg, flac, m4a, …) — Ingress handles the
 conversion.
+
+### Bots created from a client
+
+A bot created from the client has no folder path: it is given storage of its own
+under `bots.dir` (default `data/bots`), and an administrator fills it from the
+client with **playlists** — named groups of tracks, uploaded over HTTP.
+
+Two things follow, and both matter for an operator:
+
+- **This music is permanent.** Unlike room files it survives a room emptying and
+  a restart, so `bots.quota_mb` (per bot) and `bots.max_track_mb` (per track)
+  are the settings to watch. Back up `bots.dir` alongside the database if the
+  music matters — the database backup does not contain it.
+- Deleting a bot from the client deletes its storage with it. A folder you typed
+  into the panel yourself is never touched.
 
 ## Backups
 

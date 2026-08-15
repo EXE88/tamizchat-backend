@@ -79,8 +79,12 @@ type Manager struct {
 
 	mu   sync.Mutex
 	bots map[string]*bot
+	// playlists is every bot's playlists, by playlist id.
+	playlists map[string]storage.Playlist
 	// byToken resolves an Ingress fetch back to the bot it belongs to.
 	byToken map[string]string
+	// tickets are outstanding permissions to upload one track.
+	tickets map[string]*trackTicket
 }
 
 // New loads the configured bots. Bots start idle: what a bot was playing before
@@ -93,24 +97,33 @@ func New(ctx context.Context, cfg *config.Config, store *storage.Store,
 	}
 
 	m := &Manager{
-		cfg:     cfg,
-		store:   store,
-		ingress: ingress,
-		rooms:   rooms,
-		global:  global,
-		bots:    make(map[string]*bot, len(defs)),
-		byToken: make(map[string]string),
+		cfg:       cfg,
+		store:     store,
+		ingress:   ingress,
+		rooms:     rooms,
+		global:    global,
+		bots:      make(map[string]*bot, len(defs)),
+		playlists: make(map[string]storage.Playlist),
+		byToken:   make(map[string]string),
+		tickets:   make(map[string]*trackTicket),
+	}
+
+	lists, err := store.ListPlaylists(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, def := range lists {
+		m.playlists[def.ID] = def
 	}
 
 	for _, def := range defs {
 		b := &bot{def: def, state: protocol.BotIdle}
-		if tracks, err := scanFolder(def.Folder); err == nil {
-			b.tracks = tracks
-		} else if def.Enabled {
-			slog.Warn("bot folder could not be scanned",
-				"bot", def.Name, "folder", def.Folder, "err", err)
-		}
 		m.bots[def.ID] = b
+		m.rescanLocked(b)
+		if len(b.tracks) == 0 && def.Enabled {
+			slog.Warn("bot has nothing to play",
+				"bot", def.Name, "folder", def.Folder, "playlist", def.PlaylistID)
+		}
 	}
 
 	slog.Info("bots loaded", "count", len(defs))
@@ -124,7 +137,7 @@ func (m *Manager) Views() []protocol.Bot {
 
 	out := make([]protocol.Bot, 0, len(m.bots))
 	for _, b := range m.bots {
-		out = append(out, b.view())
+		out = append(out, m.viewLocked(b))
 	}
 	sortBots(out)
 	return out
@@ -146,6 +159,19 @@ func (b *bot) view() protocol.Bot {
 	}
 	if b.index >= 0 && b.index < len(b.tracks) {
 		v.Track = &protocol.BotTrack{Index: b.index, Title: b.tracks[b.index].Title}
+	}
+	return v
+}
+
+// viewLocked builds the public form, including which playlist the bot is
+// playing from. The caller must hold m.mu.
+func (m *Manager) viewLocked(b *bot) protocol.Bot {
+	v := b.view()
+	if id := b.def.PlaylistID; id != "" {
+		v.PlaylistID = id
+		if def, ok := m.playlists[id]; ok {
+			v.PlaylistName = def.Name
+		}
 	}
 	return v
 }
@@ -191,7 +217,7 @@ func (m *Manager) Move(ctx context.Context, actorUUID, botID, roomID string) (pr
 	if roomID != "" {
 		b.state = protocol.BotStopped
 	}
-	view := b.view()
+	view := m.viewLocked(b)
 	m.mu.Unlock()
 
 	m.stopIngress(ctx, previous)
@@ -276,7 +302,7 @@ func (m *Manager) play(ctx context.Context, actorUUID, botID string, step int, m
 	m.mu.Lock()
 	b.ingressID = ingressID
 	b.state = protocol.BotPlaying
-	view := b.view()
+	view := m.viewLocked(b)
 	m.mu.Unlock()
 
 	m.announce(actorUUID, view)
@@ -317,7 +343,7 @@ func (m *Manager) stop(ctx context.Context, actorUUID, botID string) (protocol.B
 	} else {
 		b.state = protocol.BotIdle
 	}
-	view := b.view()
+	view := m.viewLocked(b)
 	m.mu.Unlock()
 
 	m.stopIngress(ctx, previous)
@@ -413,9 +439,18 @@ func (m *Manager) Reload(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	lists, err := m.store.ListPlaylists(ctx)
+	if err != nil {
+		return err
+	}
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	m.playlists = make(map[string]storage.Playlist, len(lists))
+	for _, def := range lists {
+		m.playlists[def.ID] = def
+	}
 
 	seen := make(map[string]bool, len(defs))
 	for _, def := range defs {
@@ -426,12 +461,7 @@ func (m *Manager) Reload(ctx context.Context) error {
 			m.bots[def.ID] = b
 		}
 		b.def = def
-		if tracks, err := scanFolder(def.Folder); err == nil {
-			b.tracks = tracks
-			if b.index >= len(tracks) {
-				b.index = 0
-			}
-		}
+		m.rescanLocked(b)
 	}
 	for id := range m.bots {
 		if !seen[id] {

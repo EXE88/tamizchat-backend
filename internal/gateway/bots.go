@@ -146,6 +146,161 @@ func (g *Gateway) handleBotDelete(ctx context.Context, sess *session.Session, en
 	_ = sess.SendMessage(protocol.TypeBotGone, env.ID, req)
 }
 
+// handleBotQueue returns one bot's full track list. Like bot.list it needs no
+// permission: it is what a client shows in the little panel next to a bot, and
+// the titles are already audible to anyone in the room.
+func (g *Gateway) handleBotQueue(sess *session.Session, env protocol.Envelope) {
+	var req protocol.BotRequest
+	if err := json.Unmarshal(env.Data, &req); err != nil {
+		sess.SendError(env.ID, protocol.ErrBadRequest, "the message payload is not valid")
+		return
+	}
+
+	queue, err := g.bots.Queue(req.BotID)
+	if err != nil {
+		g.replyBotError(sess, env.ID, err)
+		return
+	}
+	_ = sess.SendMessage(protocol.TypeBotQueueReply, env.ID, queue)
+}
+
+// handleBotPlaylistList lists a bot's playlists. Filling playlists is an
+// administrative job, so unlike the queue this one takes manage_bots.
+func (g *Gateway) handleBotPlaylistList(sess *session.Session, env protocol.Envelope) {
+	if !g.require(sess, env.ID, authz.PermManageBots) {
+		return
+	}
+
+	var req protocol.BotRequest
+	if err := json.Unmarshal(env.Data, &req); err != nil {
+		sess.SendError(env.ID, protocol.ErrBadRequest, "the message payload is not valid")
+		return
+	}
+
+	list, err := g.bots.Playlists(req.BotID)
+	if err != nil {
+		g.replyBotError(sess, env.ID, err)
+		return
+	}
+	_ = sess.SendMessage(protocol.TypeBotPlaylists, env.ID, list)
+}
+
+func (g *Gateway) handleBotPlaylistCreate(ctx context.Context, sess *session.Session, env protocol.Envelope) {
+	spec, ok := g.decodePlaylistSpec(sess, env)
+	if !ok {
+		return
+	}
+
+	list, err := g.bots.CreatePlaylist(ctx, spec)
+	if err != nil {
+		g.replyBotError(sess, env.ID, err)
+		return
+	}
+	_ = sess.SendMessage(protocol.TypeBotPlaylist, env.ID, list)
+}
+
+func (g *Gateway) handleBotPlaylistRename(ctx context.Context, sess *session.Session, env protocol.Envelope) {
+	spec, ok := g.decodePlaylistSpec(sess, env)
+	if !ok {
+		return
+	}
+
+	list, err := g.bots.RenamePlaylist(ctx, spec)
+	if err != nil {
+		g.replyBotError(sess, env.ID, err)
+		return
+	}
+	_ = sess.SendMessage(protocol.TypeBotPlaylist, env.ID, list)
+}
+
+func (g *Gateway) handleBotPlaylistDelete(ctx context.Context, sess *session.Session, env protocol.Envelope) {
+	spec, ok := g.decodePlaylistSpec(sess, env)
+	if !ok {
+		return
+	}
+
+	if err := g.bots.DeletePlaylist(ctx, sess.ClientUUID, spec); err != nil {
+		g.replyBotError(sess, env.ID, err)
+		return
+	}
+	_ = sess.SendMessage(protocol.TypeBotPlaylistGone, env.ID, spec)
+}
+
+func (g *Gateway) handleBotPlaylistSelect(ctx context.Context, sess *session.Session, env protocol.Envelope) {
+	spec, ok := g.decodePlaylistSpec(sess, env)
+	if !ok {
+		return
+	}
+
+	view, err := g.bots.SelectPlaylist(ctx, sess.ClientUUID, spec)
+	if err != nil {
+		g.replyBotError(sess, env.ID, err)
+		return
+	}
+
+	g.access.Log(ctx, storage.ModEntry{
+		ActorUUID: sess.ClientUUID, ActorName: sess.Username(),
+		Action: "bot_playlist", TargetName: view.Name, Detail: view.PlaylistName,
+	})
+	_ = sess.SendMessage(protocol.TypeBotState, env.ID, view)
+}
+
+// handleBotTrackUpload issues the ticket for one track. The bytes then go over
+// HTTP, exactly as room files do: everything that can be refused is refused
+// before a single byte is accepted.
+func (g *Gateway) handleBotTrackUpload(sess *session.Session, env protocol.Envelope) {
+	if !g.require(sess, env.ID, authz.PermManageBots) {
+		return
+	}
+
+	var req protocol.BotTrackUploadRequest
+	if err := json.Unmarshal(env.Data, &req); err != nil {
+		sess.SendError(env.ID, protocol.ErrBadRequest, "the message payload is not valid")
+		return
+	}
+
+	ticket, err := g.bots.RequestTrackUpload(sess.ClientUUID, req)
+	if err != nil {
+		g.replyBotError(sess, env.ID, err)
+		return
+	}
+	_ = sess.SendMessage(protocol.TypeBotTrackUploadInfo, env.ID, ticket)
+}
+
+func (g *Gateway) handleBotTrackDelete(ctx context.Context, sess *session.Session, env protocol.Envelope) {
+	if !g.require(sess, env.ID, authz.PermManageBots) {
+		return
+	}
+
+	var req protocol.BotTrackRef
+	if err := json.Unmarshal(env.Data, &req); err != nil {
+		sess.SendError(env.ID, protocol.ErrBadRequest, "the message payload is not valid")
+		return
+	}
+
+	view, err := g.bots.DeleteTrack(ctx, sess.ClientUUID, req)
+	if err != nil {
+		g.replyBotError(sess, env.ID, err)
+		return
+	}
+	_ = sess.SendMessage(protocol.TypeBotState, env.ID, view)
+}
+
+// decodePlaylistSpec handles the permission check and the payload, which every
+// playlist message shares.
+func (g *Gateway) decodePlaylistSpec(sess *session.Session, env protocol.Envelope) (protocol.BotPlaylistSpec, bool) {
+	if !g.require(sess, env.ID, authz.PermManageBots) {
+		return protocol.BotPlaylistSpec{}, false
+	}
+
+	var spec protocol.BotPlaylistSpec
+	if err := json.Unmarshal(env.Data, &spec); err != nil {
+		sess.SendError(env.ID, protocol.ErrBadRequest, "the message payload is not valid")
+		return protocol.BotPlaylistSpec{}, false
+	}
+	return spec, true
+}
+
 func trackTitle(view protocol.Bot) string {
 	if view.Track == nil {
 		return ""
@@ -163,6 +318,21 @@ func (g *Gateway) replyBotError(sess *session.Session, id string, err error) {
 		sess.SendError(id, protocol.ErrBotEmpty, "that bot's music folder is empty")
 	case errors.Is(err, bots.ErrBadAction):
 		sess.SendError(id, protocol.ErrBotAction, "that command is not recognised for a bot")
+	case errors.Is(err, bots.ErrPlaylistNotFound):
+		sess.SendError(id, protocol.ErrPlaylistNotFound, "no such playlist exists for that bot")
+	case errors.Is(err, bots.ErrPlaylistTaken):
+		sess.SendError(id, protocol.ErrPlaylistNameUsed, "that bot already has a playlist by that name")
+	case errors.Is(err, bots.ErrTooManyPlaylists):
+		sess.SendError(id, protocol.ErrPlaylistTooMany, "that bot already has as many playlists as it allows")
+	case errors.Is(err, bots.ErrNotAudio):
+		sess.SendError(id, protocol.ErrTrackNotAudio,
+			"that file is not one of the audio types this server accepts")
+	case errors.Is(err, bots.ErrTrackNotFound):
+		sess.SendError(id, protocol.ErrTrackNotFound, "that track is not in the playlist")
+	case errors.Is(err, bots.ErrTooLarge):
+		sess.SendError(id, protocol.ErrFileTooLarge, "that track is larger than this server allows")
+	case errors.Is(err, bots.ErrQuotaFull):
+		sess.SendError(id, protocol.ErrRoomQuotaFull, "that bot's music storage is full")
 	case errors.Is(err, bots.ErrNameTaken):
 		sess.SendError(id, protocol.ErrBotNameUsed, "another bot already uses that name")
 	case errors.Is(err, bots.ErrTooManyBots):

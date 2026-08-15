@@ -192,6 +192,24 @@ func (g *Gateway) dispatch(ctx context.Context, sess *session.Session, data []by
 		g.handleBotUpdate(ctx, sess, env)
 	case protocol.TypeBotDelete:
 		g.handleBotDelete(ctx, sess, env)
+	case protocol.TypeBotQueue:
+		g.handleBotQueue(sess, env)
+
+	case protocol.TypeBotPlaylistList:
+		g.handleBotPlaylistList(sess, env)
+	case protocol.TypeBotPlaylistCreate:
+		g.handleBotPlaylistCreate(ctx, sess, env)
+	case protocol.TypeBotPlaylistRename:
+		g.handleBotPlaylistRename(ctx, sess, env)
+	case protocol.TypeBotPlaylistDelete:
+		g.handleBotPlaylistDelete(ctx, sess, env)
+	case protocol.TypeBotPlaylistSelect:
+		g.handleBotPlaylistSelect(ctx, sess, env)
+
+	case protocol.TypeBotTrackUpload:
+		g.handleBotTrackUpload(sess, env)
+	case protocol.TypeBotTrackDelete:
+		g.handleBotTrackDelete(ctx, sess, env)
 
 	case protocol.TypeHello:
 		sess.SendError(env.ID, protocol.ErrBadRequest, "hello is accepted only once, at the start of the connection")

@@ -73,6 +73,16 @@ const (
 	TypeBotCreate  = "bot.create"
 	TypeBotUpdate  = "bot.update"
 	TypeBotDelete  = "bot.delete"
+	TypeBotQueue   = "bot.queue"
+
+	TypeBotPlaylistList   = "bot.playlist.list"
+	TypeBotPlaylistCreate = "bot.playlist.create"
+	TypeBotPlaylistRename = "bot.playlist.rename"
+	TypeBotPlaylistDelete = "bot.playlist.delete"
+	TypeBotPlaylistSelect = "bot.playlist.select"
+
+	TypeBotTrackUpload = "bot.track.upload_request"
+	TypeBotTrackDelete = "bot.track.delete"
 )
 
 // Frame types sent by the server.
@@ -130,7 +140,13 @@ const (
 	// TypeBotGone says a bot no longer exists. bot.state covers a bot appearing
 	// as well as changing, so a client that meets an id it does not know should
 	// add it rather than ignore the frame.
-	TypeBotGone = "bot.removed"
+	TypeBotGone       = "bot.removed"
+	TypeBotQueueReply = "bot.queue"
+
+	TypeBotPlaylists       = "bot.playlist.list"
+	TypeBotPlaylist        = "bot.playlist" // one playlist, after create or rename
+	TypeBotPlaylistGone    = "bot.playlist.deleted"
+	TypeBotTrackUploadInfo = "bot.track.upload_ticket"
 
 	TypeServerNotice = "server.notice"
 )
@@ -192,6 +208,12 @@ const (
 	ErrBotAction   = "bot_bad_action"
 	ErrBotNameUsed = "bot_name_taken"
 	ErrBotTooMany  = "bot_limit_reached"
+
+	ErrPlaylistNotFound = "playlist_not_found"
+	ErrPlaylistNameUsed = "playlist_name_taken"
+	ErrPlaylistTooMany  = "playlist_limit_reached"
+	ErrTrackNotAudio    = "track_not_audio"
+	ErrTrackNotFound    = "track_not_found"
 )
 
 // Reasons a session ends, reported in user.left and in the close frame.
@@ -484,9 +506,12 @@ type Bot struct {
 	// Track is what is playing, or the track that would play next.
 	Track      *BotTrack `json:"track,omitempty"`
 	TrackCount int       `json:"track_count"`
-	Loop       bool      `json:"loop"`
-	Shuffle    bool      `json:"shuffle"`
-	Enabled    bool      `json:"enabled"`
+	// PlaylistID is what the bot plays from, empty for its own folder.
+	PlaylistID   string `json:"playlist_id,omitempty"`
+	PlaylistName string `json:"playlist_name,omitempty"`
+	Loop         bool   `json:"loop"`
+	Shuffle      bool   `json:"shuffle"`
+	Enabled      bool   `json:"enabled"`
 }
 
 // ServerNotice is a message from the server operator to everyone connected.
@@ -540,6 +565,60 @@ type BotRef struct {
 type BotQueue struct {
 	BotID  string     `json:"bot_id"`
 	Tracks []BotTrack `json:"tracks"`
+}
+
+// BotRequest names a bot in requests that carry nothing else.
+type BotRequest struct {
+	BotID string `json:"bot_id"`
+}
+
+// BotPlaylist is one named group of tracks belonging to a bot.
+type BotPlaylist struct {
+	ID         string `json:"id"`
+	BotID      string `json:"bot_id"`
+	Name       string `json:"name"`
+	TrackCount int    `json:"track_count"`
+}
+
+// BotPlaylistList is the reply to bot.playlist.list. Active is the playlist the
+// bot plays from; empty means it plays its own folder, which is what a bot
+// configured from the CLI panel does.
+type BotPlaylistList struct {
+	BotID     string        `json:"bot_id"`
+	Playlists []BotPlaylist `json:"playlists"`
+	Active    string        `json:"active_playlist_id"`
+}
+
+// BotPlaylistSpec creates, renames, deletes or selects a playlist. Which
+// fields matter depends on the message; an empty PlaylistID on select means
+// "back to the bot's own folder".
+type BotPlaylistSpec struct {
+	BotID      string `json:"bot_id"`
+	PlaylistID string `json:"playlist_id,omitempty"`
+	Name       string `json:"name,omitempty"`
+}
+
+// BotTrackUploadRequest asks permission to add one track to a playlist.
+type BotTrackUploadRequest struct {
+	BotID      string `json:"bot_id"`
+	PlaylistID string `json:"playlist_id"`
+	Name       string `json:"name"`
+	Size       int64  `json:"size,omitempty"`
+}
+
+// BotTrackUploadTicket is single-use permission to POST the bytes of one track.
+type BotTrackUploadTicket struct {
+	URL       string `json:"url"`
+	Token     string `json:"token"`
+	ExpiresAt int64  `json:"expires_at"`
+	MaxSize   int64  `json:"max_size"`
+}
+
+// BotTrackRef names one track inside a playlist by its position in the queue.
+type BotTrackRef struct {
+	BotID      string `json:"bot_id"`
+	PlaylistID string `json:"playlist_id"`
+	Index      int    `json:"index"`
 }
 
 // Paint tools.

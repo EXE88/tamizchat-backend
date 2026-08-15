@@ -250,6 +250,18 @@ var registry = buildRegistry(
 			"its own inside it. A bot created from this panel keeps its own path.",
 		Validate: notEmpty,
 	},
+	Setting{
+		Key: KeyBotsMaxTrackMB, Section: "bots", Kind: KindInt, Default: "30",
+		Title: "Largest track (MB)", Help: "Ceiling for one track uploaded into a playlist.",
+		Validate: intRange(1, 2048),
+	},
+	Setting{
+		Key: KeyBotsQuotaMB, Section: "bots", Kind: KindInt, Default: "2048",
+		Title: "Music storage per bot (MB)",
+		Help: "Total size of every playlist of one bot. Unlike room files this " +
+			"is permanent, so it is worth watching.",
+		Validate: intRange(1, 1048576),
+	},
 
 	Setting{
 		Key: KeyLogLevel, Section: "log", Kind: KindEnum, Default: "info",
@@ -312,7 +324,9 @@ const (
 	KeyLiveKitAPIKey    = "livekit.api_key"
 	KeyLiveKitAPISecret = "livekit.api_secret"
 
-	KeyBotsDir = "bots.dir"
+	KeyBotsDir        = "bots.dir"
+	KeyBotsMaxTrackMB = "bots.max_track_mb"
+	KeyBotsQuotaMB    = "bots.quota_mb"
 
 	KeyLogLevel = "log.level"
 )

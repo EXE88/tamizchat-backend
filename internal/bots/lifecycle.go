@@ -60,7 +60,10 @@ func (m *Manager) Create(ctx context.Context, actorUUID string, spec protocol.Bo
 		LoopQueue: true,
 		Enabled:   true,
 	}
-	def.Folder = m.managedFolder(def.ID)
+	// The bot's own library is a folder *inside* its storage, not the storage
+	// root: playlists are siblings of it, and a scan of the library walks
+	// subfolders, so a nested playlist would show up twice.
+	def.Folder = m.libraryFolder(def.ID)
 	if spec.Loop != nil {
 		def.LoopQueue = *spec.Loop
 	}
@@ -87,7 +90,7 @@ func (m *Manager) Create(ctx context.Context, actorUUID string, spec protocol.Bo
 	m.mu.Lock()
 	b := &bot{def: def, state: protocol.BotIdle}
 	m.bots[def.ID] = b
-	view := b.view()
+	view := m.viewLocked(b)
 	m.mu.Unlock()
 
 	m.announce(actorUUID, view)
@@ -155,7 +158,7 @@ func (m *Manager) Update(ctx context.Context, actorUUID string, spec protocol.Bo
 
 	m.mu.Lock()
 	b.def = def
-	view := b.view()
+	view := m.viewLocked(b)
 	m.mu.Unlock()
 
 	m.announce(actorUUID, view)
@@ -165,9 +168,9 @@ func (m *Manager) Update(ctx context.Context, actorUUID string, spec protocol.Bo
 // Delete removes a bot: it stops playing, leaves its room and is gone from the
 // database.
 //
-// Its music is deleted with it only when the folder is one this server made for
-// it. A folder an operator typed into the CLI panel is theirs, may hold music
-// that belongs to something else entirely, and is left exactly as it was.
+// Its playlists go with it, and so does the folder this server made for it. A
+// folder an operator typed into the CLI panel is theirs, may hold music that
+// belongs to something else entirely, and is left exactly as it was.
 func (m *Manager) Delete(ctx context.Context, botID string) error {
 	m.mu.Lock()
 	b, ok := m.bots[botID]
@@ -176,7 +179,6 @@ func (m *Manager) Delete(ctx context.Context, botID string) error {
 		return ErrNotFound
 	}
 	ingressID := b.ingressID
-	folder := b.def.Folder
 	name := b.def.Name
 	m.dropTokenLocked(b)
 	m.mu.Unlock()
@@ -187,26 +189,42 @@ func (m *Manager) Delete(ctx context.Context, botID string) error {
 		}
 		return err
 	}
+	if err := m.store.DeletePlaylistsOfBot(ctx, botID); err != nil {
+		return err
+	}
 
 	m.mu.Lock()
 	delete(m.bots, botID)
+	for id, def := range m.playlists {
+		if def.BotID == botID {
+			delete(m.playlists, id)
+		}
+	}
 	m.mu.Unlock()
 
 	m.stopIngress(ctx, ingressID)
 
-	if folder != "" && folder == m.managedFolder(botID) {
-		if err := os.RemoveAll(folder); err != nil {
-			slog.Warn("could not remove a deleted bot's folder",
-				"bot", name, "folder", folder, "err", err)
-		}
+	// Only the folder we made — which is where every playlist lives — is
+	// removed. It is ours by construction, so there is nothing of anyone else's
+	// in it.
+	if err := os.RemoveAll(m.managedFolder(botID)); err != nil {
+		slog.Warn("could not remove a deleted bot's folder",
+			"bot", name, "folder", m.managedFolder(botID), "err", err)
 	}
 
 	slog.Info("bot deleted", "bot", name)
 	return nil
 }
 
-// managedFolder is where a bot created from a client keeps its music. It is
-// also the test for whether a folder is ours to delete.
+// libraryFolder is what a client-created bot plays from when no playlist is
+// selected — its own loose collection, alongside its playlists.
+func (m *Manager) libraryFolder(botID string) string {
+	return filepath.Join(m.managedFolder(botID), "default")
+}
+
+// managedFolder is the storage this server owns for one bot: its library, its
+// playlists, and nothing of anybody else's. It is also the test for whether a
+// folder is ours to delete.
 func (m *Manager) managedFolder(botID string) string {
 	root := strings.TrimSpace(m.cfg.String(config.KeyBotsDir))
 	if root == "" {

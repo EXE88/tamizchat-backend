@@ -2,17 +2,26 @@ package httpapi
 
 import (
 	"context"
+	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
+
+	"tamizchat/internal/bots"
+	"tamizchat/internal/protocol"
 )
 
-// Bots is what the HTTP layer needs to serve a bot's music to LiveKit.
+// Bots is what the HTTP layer needs to serve a bot's music to LiveKit, and to
+// receive a track uploaded into a playlist.
 type Bots interface {
 	// ResolveTrack turns a fetch token into the file that is playing now.
 	ResolveTrack(botID, token string) (path, title string, err error)
+	// UploadTrack consumes an upload ticket and stores the bytes, returning the
+	// bot's new state.
+	UploadTrack(ctx context.Context, token string, body io.Reader) (protocol.Bot, error)
 }
 
 // LiveKitWebhooks verifies and dispatches the callbacks LiveKit sends us.
@@ -56,6 +65,51 @@ func (d Deps) handleBotStream(w http.ResponseWriter, r *http.Request) {
 	// ServeContent gives Ingress the range requests it uses to seek, and picks
 	// the content type from the extension.
 	http.ServeContent(w, r, filepath.Base(title+filepath.Ext(path)), info.ModTime(), file)
+}
+
+// handleBotTrackUpload receives one track for a playlist. The ticket, issued
+// over the WebSocket, already carries the bot, the playlist, the file name and
+// the ceiling, so this handler needs no separate authentication — the same
+// division of labour as the room-file upload.
+func (d Deps) handleBotTrackUpload(w http.ResponseWriter, r *http.Request) {
+	token := bearerToken(r)
+	if token == "" {
+		writeJSON(w, http.StatusUnauthorized,
+			errorBody(protocol.ErrBadRequest, "an upload token is required"))
+		return
+	}
+
+	// A hard ceiling on the body regardless of the ticket, so a client cannot
+	// stream into this handler forever.
+	r.Body = http.MaxBytesReader(w, r.Body, d.MaxTrackBytes()+(1<<20))
+
+	view, err := d.Bots.UploadTrack(r.Context(), token, r.Body)
+	if err != nil {
+		status, code, message := trackUploadError(err)
+		writeJSON(w, status, errorBody(code, message))
+		return
+	}
+	writeJSON(w, http.StatusOK, view)
+}
+
+func trackUploadError(err error) (int, string, string) {
+	switch {
+	case errors.Is(err, bots.ErrBadTicket):
+		return http.StatusForbidden, protocol.ErrForbidden, "that upload ticket is not valid any more"
+	case errors.Is(err, bots.ErrTooLarge):
+		return http.StatusRequestEntityTooLarge, protocol.ErrFileTooLarge, "that track is too large"
+	case errors.Is(err, bots.ErrQuotaFull):
+		return http.StatusInsufficientStorage, protocol.ErrRoomQuotaFull, "that bot's music storage is full"
+	case errors.Is(err, bots.ErrEmptyUpload):
+		return http.StatusBadRequest, protocol.ErrFileInvalid, "the upload was empty"
+	case errors.Is(err, bots.ErrNotFound), errors.Is(err, bots.ErrPlaylistNotFound):
+		return http.StatusNotFound, protocol.ErrPlaylistNotFound, "that playlist no longer exists"
+	case errors.Is(err, bots.ErrNotAudio):
+		return http.StatusBadRequest, protocol.ErrTrackNotAudio, "that file is not an accepted audio type"
+	default:
+		slog.Error("bot track upload failed", "err", err)
+		return http.StatusInternalServerError, protocol.ErrInternal, "internal server error"
+	}
 }
 
 // handleLiveKitWebhook receives LiveKit's callbacks — chiefly "this ingress

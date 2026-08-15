@@ -194,6 +194,28 @@ ALTER TABLE roles ADD COLUMN tag_style TEXT NOT NULL DEFAULT '';`,
 UPDATE roles SET permissions = permissions | 65536
 WHERE id = 'role-admin';`,
 	},
+	{
+		// Named playlists for a bot, filled by upload from a client.
+		//
+		// A playlist's files live in a folder named after its id, under the
+		// server's own bot storage — never under a folder an operator typed in,
+		// which is theirs and may hold music that belongs to something else.
+		// The bots.folder column keeps meaning what it always meant: where a
+		// panel-configured bot plays from when no playlist is selected.
+		name: "0011_bot_playlists",
+		stmt: `
+CREATE TABLE bot_playlists (
+	id         TEXT PRIMARY KEY,
+	bot_id     TEXT NOT NULL,
+	name       TEXT NOT NULL,
+	created_at INTEGER NOT NULL
+) STRICT;
+
+CREATE UNIQUE INDEX idx_bot_playlists_name ON bot_playlists (bot_id, name COLLATE NOCASE);
+CREATE INDEX idx_bot_playlists_bot ON bot_playlists (bot_id);
+
+ALTER TABLE bots ADD COLUMN playlist_id TEXT NOT NULL DEFAULT '';`,
+	},
 }
 
 func (s *Store) migrate(ctx context.Context) error {

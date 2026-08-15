@@ -507,7 +507,9 @@ func TestBotCreateUpdateDeleteOverTheSocket(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get bot: %v", err)
 	}
-	if !strings.HasSuffix(filepath.ToSlash(stored.Folder), "bots/"+created.ID) {
+	// The library is a folder inside the bot's own storage; its playlists sit
+	// beside it, so a scan of the library never picks them up twice.
+	if !strings.HasSuffix(filepath.ToSlash(stored.Folder), "bots/"+created.ID+"/default") {
 		t.Fatalf("bot folder = %q, want one derived from the id", stored.Folder)
 	}
 	if _, err := os.Stat(stored.Folder); err != nil {

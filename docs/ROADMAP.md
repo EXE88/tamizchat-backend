@@ -235,8 +235,12 @@ panel:
   0010). No folder travels on the wire; a client-created bot gets its own folder
   under the new `bots.dir` setting. See PROTOCOL.md.
 
-Still open, and next: **bot playlists** — named playlists per bot with upload
-from the client, reusing the phase-6 ticket pattern.
+- **Bot playlists** — named playlists per bot (migration 0011), filled by upload
+  from the client over `POST /api/v1/bot-track` with a ticket issued on the
+  socket, exactly like room files. A bot plays either a playlist or its own
+  library; this music is permanent and has its own quota (`bots.quota_mb`).
+
+Still open, and next: the **Bots tab in the WinUI client**.
 
 Work that was deliberately deferred and can be picked up whenever it is needed:
 

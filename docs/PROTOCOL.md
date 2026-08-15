@@ -109,6 +109,14 @@ the client can build its interface immediately without an extra request.
 | `bot.create` | BotSpec | Requires the `manage_bots` permission |
 | `bot.update` | BotSpec with `bot_id` | Requires the `manage_bots` permission |
 | `bot.delete` | `{"bot_id"}` | Requires the `manage_bots` permission |
+| `bot.queue` | `{"bot_id"}` | The bot's full track list (open to everyone) |
+| `bot.playlist.list` | `{"bot_id"}` | Requires the `manage_bots` permission |
+| `bot.playlist.create` | `{"bot_id", "name"}` | Requires the `manage_bots` permission |
+| `bot.playlist.rename` | `{"bot_id", "playlist_id", "name"}` | Requires the `manage_bots` permission |
+| `bot.playlist.delete` | `{"bot_id", "playlist_id"}` | Deletes its music too |
+| `bot.playlist.select` | `{"bot_id", "playlist_id"}` | Empty id = the bot's own library |
+| `bot.track.upload_request` | `{"bot_id", "playlist_id", "name", "size"?}` | Returns an upload ticket |
+| `bot.track.delete` | `{"bot_id", "playlist_id", "index"}` | Removes one track from a playlist |
 
 `capacity: 0` on creation means "use the server default".
 
@@ -155,6 +163,11 @@ the client can build its interface immediately without an extra request.
 | `bot.list` | `{"bots": [Bot]}` |
 | `bot.state` | A Bot — every time the bot's state changes, including a new one |
 | `bot.removed` | `{"bot_id"}` — that bot no longer exists |
+| `bot.queue` | `{"bot_id", "tracks": [BotTrack]}` |
+| `bot.playlist.list` | `{"bot_id", "playlists": [BotPlaylist], "active_playlist_id"}` |
+| `bot.playlist` | One BotPlaylist, after create or rename |
+| `bot.playlist.deleted` | `{"bot_id", "playlist_id"}` |
+| `bot.track.upload_ticket` | `{"url", "token", "expires_at", "max_size"}` |
 | `server.notice` | `{"text", "from"}` — a notice from the server operator |
 
 The `Room` shape:
@@ -260,6 +273,11 @@ The codes are stable identifiers; a client should show its own text based on
 | `bot_bad_action` | The bot command is not recognised |
 | `bot_name_taken` | Another bot already uses that name |
 | `bot_limit_reached` | The server already has as many bots as it allows |
+| `playlist_not_found` | No such playlist for that bot |
+| `playlist_name_taken` | That bot already has a playlist by that name |
+| `playlist_limit_reached` | That bot has as many playlists as it allows |
+| `track_not_audio` | The file is not one of the accepted audio types |
+| `track_not_found` | No track at that position in the playlist |
 | `message_invalid` | The text or sticker is not acceptable (`message` is displayable) |
 | `message_not_found` | The message is no longer in the room's memory |
 | `stickers_disabled` | Stickers are off on this server |
@@ -620,6 +638,46 @@ A create broadcasts an ordinary `bot.state`, so a client meeting an id it does
 not know should add it rather than ignore the frame. A delete broadcasts
 `bot.removed`. In both cases the actor is left out of the broadcast and matches
 their own reply by `id`.
+
+### Playlists
+
+A bot has named playlists, and plays from one of them or from its own library.
+
+```json
+{ "id": "…", "bot_id": "…", "name": "Party", "track_count": 12 }
+```
+
+- The `Bot` shape carries `playlist_id` and `playlist_name` for whichever one is
+  selected. Both are absent when the bot is on its own library — which is what a
+  bot configured from the CLI panel is, always.
+- **Selecting a playlist stops playback.** The queue is about to be a different
+  list, and carrying the index across it would resume at an unrelated track.
+- Deleting the active playlist puts the bot back on its library and stops it.
+- Layout on disk, for the record: `<bots.dir>/<bot id>/default` is the library
+  and `<bots.dir>/<bot id>/<playlist id>` is a playlist. The library is a folder
+  *beside* the playlists, not above them: a scan walks subfolders, so a nested
+  playlist would be played twice.
+
+### Adding tracks
+
+Uploading a track is the same two-step dance as a room file — **permission over
+the socket, bytes over HTTP** — and for the same reason: everything that can be
+refused is refused before a single byte is accepted.
+
+1. `bot.track.upload_request` → `bot.track.upload_ticket`. The server checks the
+   bot, the playlist, the file type and the bot's storage quota here.
+2. `POST` the bytes to the ticket's `url`. The reply is the bot's new state.
+
+The ticket is single-use and lives two minutes. Unlike a room file — stored
+under a random id — a track keeps its **file name**: the queue is the folder
+listing and the title a listener sees is that name. So the name is stripped of
+anything that could leave the folder, must end in an accepted audio extension
+(`.mp3 .ogg .opus .flac .m4a .aac .wav .wma`), and a second file by the same
+name becomes "name (2).mp3" rather than replacing the first.
+
+Unlike room files, this music is **permanent**: it is not purged when a room
+empties. `bots.quota_mb` is the ceiling per bot and `bots.max_track_mb` the
+ceiling for one track.
 
 ### What is deliberately missing
 

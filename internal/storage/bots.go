@@ -28,16 +28,19 @@ type Bot struct {
 	LoopQueue bool
 	Shuffle   bool
 	Enabled   bool
-	CreatedAt int64
+	// PlaylistID is the playlist the bot plays from. Empty means it plays
+	// Folder itself, which is what a panel-configured bot does.
+	PlaylistID string
+	CreatedAt  int64
 }
 
 // CreateBot inserts a bot definition.
 func (s *Store) CreateBot(ctx context.Context, b Bot) error {
 	_, err := s.db.ExecContext(ctx, `
-INSERT INTO bots (id, name, kind, folder, color, loop_queue, shuffle, enabled, created_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, unixepoch())`,
+INSERT INTO bots (id, name, kind, folder, color, loop_queue, shuffle, enabled, playlist_id, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch())`,
 		b.ID, b.Name, b.Kind, b.Folder, b.Color,
-		boolToInt(b.LoopQueue), boolToInt(b.Shuffle), boolToInt(b.Enabled))
+		boolToInt(b.LoopQueue), boolToInt(b.Shuffle), boolToInt(b.Enabled), b.PlaylistID)
 	if isUniqueViolation(err) {
 		return ErrBotNameTaken
 	}
@@ -50,10 +53,11 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, unixepoch())`,
 // UpdateBot overwrites the editable fields of a bot.
 func (s *Store) UpdateBot(ctx context.Context, b Bot) error {
 	res, err := s.db.ExecContext(ctx, `
-UPDATE bots SET name = ?, folder = ?, color = ?, loop_queue = ?, shuffle = ?, enabled = ?
+UPDATE bots SET name = ?, folder = ?, color = ?, loop_queue = ?, shuffle = ?,
+	enabled = ?, playlist_id = ?
 WHERE id = ?`,
 		b.Name, b.Folder, b.Color, boolToInt(b.LoopQueue),
-		boolToInt(b.Shuffle), boolToInt(b.Enabled), b.ID)
+		boolToInt(b.Shuffle), boolToInt(b.Enabled), b.PlaylistID, b.ID)
 	if isUniqueViolation(err) {
 		return ErrBotNameTaken
 	}
@@ -83,9 +87,10 @@ func (s *Store) GetBot(ctx context.Context, id string) (Bot, error) {
 	var b Bot
 	var loop, shuffle, enabled int
 	err := s.db.QueryRowContext(ctx, `
-SELECT id, name, kind, folder, color, loop_queue, shuffle, enabled, created_at
+SELECT id, name, kind, folder, color, loop_queue, shuffle, enabled, playlist_id, created_at
 FROM bots WHERE id = ?`, id).
-		Scan(&b.ID, &b.Name, &b.Kind, &b.Folder, &b.Color, &loop, &shuffle, &enabled, &b.CreatedAt)
+		Scan(&b.ID, &b.Name, &b.Kind, &b.Folder, &b.Color, &loop, &shuffle, &enabled,
+			&b.PlaylistID, &b.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Bot{}, ErrBotNotFound
 	}
@@ -99,7 +104,7 @@ FROM bots WHERE id = ?`, id).
 // ListBots returns every bot, oldest first.
 func (s *Store) ListBots(ctx context.Context) ([]Bot, error) {
 	rows, err := s.db.QueryContext(ctx, `
-SELECT id, name, kind, folder, color, loop_queue, shuffle, enabled, created_at
+SELECT id, name, kind, folder, color, loop_queue, shuffle, enabled, playlist_id, created_at
 FROM bots ORDER BY created_at`)
 	if err != nil {
 		return nil, fmt.Errorf("list bots: %w", err)
@@ -111,7 +116,7 @@ FROM bots ORDER BY created_at`)
 		var b Bot
 		var loop, shuffle, enabled int
 		if err := rows.Scan(&b.ID, &b.Name, &b.Kind, &b.Folder, &b.Color,
-			&loop, &shuffle, &enabled, &b.CreatedAt); err != nil {
+			&loop, &shuffle, &enabled, &b.PlaylistID, &b.CreatedAt); err != nil {
 			return nil, err
 		}
 		b.LoopQueue, b.Shuffle, b.Enabled = loop != 0, shuffle != 0, enabled != 0
