@@ -119,7 +119,15 @@ func withinRoot(root, path string) bool {
 	if err != nil {
 		return false
 	}
-	rel, err := filepath.Rel(absRoot, path)
+	// Both sides are absolutized before they are compared. filepath.Rel refuses
+	// to relate an absolute base to a relative path, and "data/bots" — the
+	// default — is relative, so skipping this rejected every legitimate upload
+	// on a stock configuration.
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(absRoot, absPath)
 	if err != nil {
 		return false
 	}

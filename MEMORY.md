@@ -54,7 +54,7 @@ played on ban, microphone and listening settings, key bindings for shortcuts.
 
 ## Current status
 
-**All 11 backend phases are done and tested** (235 tests, all green), plus the
+**All 11 backend phases are done and tested** (241 tests, all green), plus the
 post-roadmap work the client's admin panel needs — see "Work added after phase
 11" below.
 The backend is complete as far as the roadmap goes; the project's next step is
@@ -392,8 +392,22 @@ things the wire did not have. Added since:
     left out of the `bot.state` broadcast — the same rule as everywhere else.
   - `bot.queue` finally exists on the wire; `Manager.Queue` had been unreachable
     since phase 9.
-  - Playlists are managed from the client only. The CLI panel still owns
-    folder-based bots and was deliberately left alone.
+  - Playlists are created and filled from the client only. The CLI panel still
+    owns folder-based bots, but its bot list now shows **what a bot actually
+    plays from** ("playlist: Evening set") and counts that folder — reporting
+    the `folder` column would have told an operator that a bot with three tracks
+    had none.
+  - `bot.queue` takes an optional `playlist_id`, so a playlist can be inspected
+    and tidied before it is switched to. Without it the client could only ever
+    see the playlist that was already playing.
+  - **The bug that only a real run could find:** `withinRoot` compared an
+    absolutized root against a *relative* path, and `filepath.Rel` refuses that
+    pair — so every upload was rejected with `track_not_audio` on a stock
+    configuration, while every test passed because tests use a temp directory,
+    which is absolute. Both sides are absolutized now, and
+    `internal/bots/paths_test.go` pins it. The lesson is worth keeping: a
+    default-valued relative path is a case the tests were structurally unable to
+    reach.
 
 ## Final backend status
 

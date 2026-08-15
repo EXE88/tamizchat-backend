@@ -567,9 +567,11 @@ type BotQueue struct {
 	Tracks []BotTrack `json:"tracks"`
 }
 
-// BotRequest names a bot in requests that carry nothing else.
+// BotRequest names a bot in requests that carry nothing else. bot.queue also
+// accepts a playlist id, to look inside a playlist the bot is not playing.
 type BotRequest struct {
-	BotID string `json:"bot_id"`
+	BotID      string `json:"bot_id"`
+	PlaylistID string `json:"playlist_id,omitempty"`
 }
 
 // BotPlaylist is one named group of tracks belonging to a bot.

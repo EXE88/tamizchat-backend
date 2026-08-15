@@ -440,6 +440,15 @@ func (m *Manager) playlistDir(botID, playlistID string) string {
 	return filepath.Join(m.managedFolder(botID), playlistID)
 }
 
+// PlaylistFolder is the same path worked out from the bots.dir setting alone,
+// for the CLI panel — which reads the database directly and has no manager.
+func PlaylistFolder(root, botID, playlistID string) string {
+	if strings.TrimSpace(root) == "" {
+		root = "data/bots"
+	}
+	return filepath.Join(root, botID, playlistID)
+}
+
 // sourceDirLocked is what the bot plays from right now. The caller must hold
 // m.mu.
 func (m *Manager) sourceDirLocked(b *bot) string {

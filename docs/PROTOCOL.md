@@ -109,7 +109,7 @@ the client can build its interface immediately without an extra request.
 | `bot.create` | BotSpec | Requires the `manage_bots` permission |
 | `bot.update` | BotSpec with `bot_id` | Requires the `manage_bots` permission |
 | `bot.delete` | `{"bot_id"}` | Requires the `manage_bots` permission |
-| `bot.queue` | `{"bot_id"}` | The bot's full track list (open to everyone) |
+| `bot.queue` | `{"bot_id", "playlist_id"?}` | The bot's track list, or one playlist's (that needs `manage_bots`) |
 | `bot.playlist.list` | `{"bot_id"}` | Requires the `manage_bots` permission |
 | `bot.playlist.create` | `{"bot_id", "name"}` | Requires the `manage_bots` permission |
 | `bot.playlist.rename` | `{"bot_id", "playlist_id", "name"}` | Requires the `manage_bots` permission |

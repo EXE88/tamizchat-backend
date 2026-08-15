@@ -156,7 +156,21 @@ func (g *Gateway) handleBotQueue(sess *session.Session, env protocol.Envelope) {
 		return
 	}
 
-	queue, err := g.bots.Queue(req.BotID)
+	// Looking inside a playlist the bot is not playing is part of filling it,
+	// which is an administrative job; the bot's own queue is not.
+	if req.PlaylistID != "" && !g.require(sess, env.ID, authz.PermManageBots) {
+		return
+	}
+
+	var (
+		queue protocol.BotQueue
+		err   error
+	)
+	if req.PlaylistID != "" {
+		queue, err = g.bots.PlaylistQueue(req.BotID, req.PlaylistID)
+	} else {
+		queue, err = g.bots.Queue(req.BotID)
+	}
 	if err != nil {
 		g.replyBotError(sess, env.ID, err)
 		return

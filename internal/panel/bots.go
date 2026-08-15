@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"tamizchat/internal/bots"
+	"tamizchat/internal/config"
 	"tamizchat/internal/storage"
 	"tamizchat/internal/textutil"
 )
@@ -28,11 +29,12 @@ func (p *Panel) botsMenu(ctx context.Context) {
 		if len(list) == 0 {
 			p.println("  No bots have been created yet.\n")
 		} else {
-			p.printf("  %-4s %-20s %-10s %-8s %s\n", "#", "NAME", "STATE", "TRACKS", "FOLDER")
+			p.printf("  %-4s %-20s %-10s %-8s %s\n", "#", "NAME", "STATE", "TRACKS", "PLAYS FROM")
 			for i, b := range list {
-				count, note := p.trackCount(b.Folder)
+				source, label := p.botSource(ctx, b)
+				count, note := p.trackCount(source)
 				p.printf("  %-4d %-20s %-10s %-8s %s\n", i+1, truncate(b.Name, 20),
-					yesNo(b.Enabled), count, truncate(b.Folder, 40))
+					yesNo(b.Enabled), count, truncate(label, 40))
 				if note != "" {
 					p.printf("       %s\n", dim(note))
 				}
@@ -58,6 +60,23 @@ func (p *Panel) botsMenu(ctx context.Context) {
 			p.warn("Invalid choice")
 		}
 	}
+}
+
+// botSource is where a bot actually plays from, and how to describe it. A bot
+// on a playlist plays that playlist's folder, not the one in its own row, and
+// reporting the row would tell the operator a bot with music has none.
+func (p *Panel) botSource(ctx context.Context, b storage.Bot) (folder, label string) {
+	if b.PlaylistID == "" {
+		return b.Folder, b.Folder
+	}
+
+	folder = bots.PlaylistFolder(p.cfg.String(config.KeyBotsDir), b.ID, b.PlaylistID)
+
+	name := b.PlaylistID
+	if list, err := p.store.GetPlaylist(ctx, b.PlaylistID); err == nil {
+		name = list.Name
+	}
+	return folder, "playlist: " + name
 }
 
 // trackCount reports how much music a folder actually holds, so a typo in the
