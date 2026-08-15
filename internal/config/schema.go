@@ -235,6 +235,13 @@ var registry = buildRegistry(
 		Title: "LiveKit URL", Help: "e.g. ws://127.0.0.1:7880 — the address clients use for media.",
 	},
 	Setting{
+		Key: KeyLiveKitAPIURL, Section: "livekit", Kind: KindString, Default: "",
+		Title: "LiveKit address for this server",
+		Help: "Only if this server reaches LiveKit at a different address than " +
+			"clients do — an internal name, or host.docker.internal. Empty means " +
+			"use the address above for both.",
+	},
+	Setting{
 		Key: KeyLiveKitAPIKey, Section: "livekit", Kind: KindString, Default: "",
 		Title: "LiveKit API Key", Help: "The key issued in the LiveKit config.",
 	},
@@ -323,6 +330,7 @@ const (
 
 	KeyLiveKitEnabled   = "livekit.enabled"
 	KeyLiveKitURL       = "livekit.url"
+	KeyLiveKitAPIURL    = "livekit.api_url"
 	KeyLiveKitAPIKey    = "livekit.api_key"
 	KeyLiveKitAPISecret = "livekit.api_secret"
 

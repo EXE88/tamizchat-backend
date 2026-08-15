@@ -64,9 +64,6 @@ type bot struct {
 	state     string
 	index     int
 	ingressID string
-	// token authorizes Ingress to fetch the current track.
-	token   string
-	expires time.Time
 	// startedAt is when the current track began, and shortRuns counts how many
 	// tracks in a row have ended almost immediately. A broken audio path — a
 	// file LiveKit cannot decode, an Ingress that cannot reach the media port —
@@ -83,6 +80,14 @@ const (
 	howManyShortRuns = 3
 )
 
+// trackGrant is permission to fetch one file, once minted, until it expires.
+type trackGrant struct {
+	botID   string
+	path    string
+	title   string
+	expires time.Time
+}
+
 // Manager owns every bot on the server.
 type Manager struct {
 	cfg     *config.Config
@@ -95,8 +100,15 @@ type Manager struct {
 	bots map[string]*bot
 	// playlists is every bot's playlists, by playlist id.
 	playlists map[string]storage.Playlist
-	// byToken resolves an Ingress fetch back to the bot it belongs to.
-	byToken map[string]string
+	// grants are outstanding permissions for Ingress to fetch one track.
+	//
+	// One per *track*, not one per bot. A bot used to hold a single token that
+	// the next play replaced, so an Ingress still fetching the previous track
+	// got a 404, reported the track as ended, and the queue advanced — which
+	// started the next track, replaced the token again, and went round forever.
+	// A grant also remembers which file it was minted for, so a fetch can never
+	// be answered with whatever the queue happens to point at now.
+	grants map[string]trackGrant
 	// tickets are outstanding permissions to upload one track.
 	tickets map[string]*trackTicket
 }
@@ -118,7 +130,7 @@ func New(ctx context.Context, cfg *config.Config, store *storage.Store,
 		global:    global,
 		bots:      make(map[string]*bot, len(defs)),
 		playlists: make(map[string]storage.Playlist),
-		byToken:   make(map[string]string),
+		grants:    make(map[string]trackGrant),
 		tickets:   make(map[string]*trackTicket),
 	}
 
@@ -297,11 +309,11 @@ func (m *Manager) play(ctx context.Context, actorUUID, botID string, step int, m
 
 	previous := b.ingressID
 	b.ingressID = ""
-	m.issueTokenLocked(b)
+	token := m.grantTrackLocked(b)
 
 	roomID, identity, name := b.roomID, b.identity(), b.def.Name
 	streamURL := fmt.Sprintf("%s/api/v1/bot-stream/%s?token=%s",
-		base, url.PathEscape(b.def.ID), url.QueryEscape(b.token))
+		base, url.PathEscape(b.def.ID), url.QueryEscape(token))
 	m.mu.Unlock()
 
 	// The old ingress goes first: two ingresses publishing as the same identity
@@ -352,7 +364,6 @@ func (m *Manager) stop(ctx context.Context, actorUUID, botID string) (protocol.B
 	}
 	previous := b.ingressID
 	b.ingressID = ""
-	m.dropTokenLocked(b)
 	if b.roomID != "" {
 		b.state = protocol.BotStopped
 	} else {
@@ -424,36 +435,40 @@ func (m *Manager) TrackEnded(ctx context.Context, ingressID string) {
 	}
 }
 
-// ResolveTrack turns an Ingress fetch into a file to serve. It is deliberately
-// strict: the token must be the bot's current one, and the file must still sit
-// inside the configured folder.
+// ResolveTrack turns an Ingress fetch into a file to serve.
+//
+// The grant names the file, so a fetch is always answered with the track it was
+// issued for — never with whatever the queue moved on to in the meantime, which
+// is what "the wrong song played" would have looked like.
 func (m *Manager) ResolveTrack(botID, token string) (path, filename string, err error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	if token == "" {
+		return "", "", ErrNotFound
+	}
+
+	grant, ok := m.grants[token]
+	if !ok || grant.botID != botID || time.Now().After(grant.expires) {
+		return "", "", ErrNotFound
+	}
+	if grant.path == "" {
+		return "", "", ErrEmptyQueue
+	}
 
 	b, ok := m.bots[botID]
 	if !ok {
 		return "", "", ErrNotFound
 	}
-	if b.token == "" || token == "" || b.token != token {
-		return "", "", ErrNotFound
-	}
-	if time.Now().After(b.expires) {
-		return "", "", ErrNotFound
-	}
-	if b.index < 0 || b.index >= len(b.tracks) {
-		return "", "", ErrEmptyQueue
-	}
 
-	// The check is against whatever the bot plays from *now* — its library, or
-	// the playlist it is on. Checking def.Folder alone meant every track in a
-	// playlist was refused, so Ingress fetched a 404 and the bot published
-	// silence while claiming to play.
-	track := b.tracks[b.index]
-	if !withinRoot(m.sourceDirLocked(b), track.Path) {
+	// Re-checked at fetch time as well as at mint time: the file must still sit
+	// in something this bot plays from. A playlist deleted between the two is
+	// exactly the case that would otherwise serve a file out of a folder the bot
+	// no longer has anything to do with.
+	if !withinRoot(m.sourceDirLocked(b), grant.path) && !withinRoot(b.def.Folder, grant.path) {
 		return "", "", ErrNotFound
 	}
-	return track.Path, track.Title, nil
+	return grant.path, grant.title, nil
 }
 
 // RoomGone stops any bot that was sitting in a room that no longer exists.
@@ -552,23 +567,44 @@ func (b *bot) advance(step int) {
 // from ever colliding with a real client UUID.
 func (b *bot) identity() string { return "bot-" + b.def.ID }
 
-// issueTokenLocked mints a fresh fetch token. The caller must hold m.mu.
-func (m *Manager) issueTokenLocked(b *bot) {
-	m.dropTokenLocked(b)
+// grantTrackLocked mints permission to fetch the track the bot is on right now.
+// The caller must hold m.mu.
+func (m *Manager) grantTrackLocked(b *bot) string {
+	m.sweepGrantsLocked()
 
 	var raw [24]byte
 	if _, err := crand.Read(raw[:]); err != nil {
 		panic("tamizchat: crypto/rand failed: " + err.Error())
 	}
-	b.token = base64.RawURLEncoding.EncodeToString(raw[:])
-	b.expires = time.Now().Add(trackTokenTTL)
-	m.byToken[b.token] = b.def.ID
+	token := base64.RawURLEncoding.EncodeToString(raw[:])
+
+	grant := trackGrant{botID: b.def.ID, expires: time.Now().Add(trackTokenTTL)}
+	if b.index >= 0 && b.index < len(b.tracks) {
+		grant.path = b.tracks[b.index].Path
+		grant.title = b.tracks[b.index].Title
+	}
+
+	m.grants[token] = grant
+	return token
 }
 
-func (m *Manager) dropTokenLocked(b *bot) {
-	if b.token != "" {
-		delete(m.byToken, b.token)
-		b.token = ""
+// dropGrantsLocked forgets every grant belonging to a bot. Used when the bot is
+// deleted; stopping deliberately does not, because a fetch already under way is
+// what makes the last few seconds of a track arrive.
+func (m *Manager) dropGrantsLocked(botID string) {
+	for token, grant := range m.grants {
+		if grant.botID == botID {
+			delete(m.grants, token)
+		}
+	}
+}
+
+func (m *Manager) sweepGrantsLocked() {
+	now := time.Now()
+	for token, grant := range m.grants {
+		if now.After(grant.expires) {
+			delete(m.grants, token)
+		}
 	}
 }
 

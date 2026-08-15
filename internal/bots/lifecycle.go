@@ -180,7 +180,7 @@ func (m *Manager) Delete(ctx context.Context, botID string) error {
 	}
 	ingressID := b.ingressID
 	name := b.def.Name
-	m.dropTokenLocked(b)
+	m.dropGrantsLocked(botID)
 	m.mu.Unlock()
 
 	// A row that has already gone is not a failure: the caller asked for this

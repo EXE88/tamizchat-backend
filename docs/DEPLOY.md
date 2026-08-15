@@ -119,6 +119,9 @@ applies moderation. Media is handled by **LiveKit**, which is a separate service
    - then turn `livekit.enabled` on.
 
 The server's API address is derived from that same `url` (`ws://` → `http://`).
+If this server reaches LiveKit at a different address than clients do — an
+internal name, or `host.docker.internal` from a container — put that one in
+**`livekit.api_url`** and leave `livekit.url` as the address clients dial.
 
 ## The music bot
 

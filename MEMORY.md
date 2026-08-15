@@ -54,7 +54,7 @@ played on ban, microphone and listening settings, key bindings for shortcuts.
 
 ## Current status
 
-**All 11 backend phases are done and tested** (242 tests, all green), plus the
+**All 11 backend phases are done and tested** (244 tests, all green), plus the
 post-roadmap work the client's admin panel needs — see "Work added after phase
 11" below.
 The backend is complete as far as the roadmap goes; the project's next step is
@@ -434,6 +434,18 @@ calls a real one refuses.
   working directory. It had been landing in `/data/data/bots` in the container,
   and one `WorkingDirectory=` away it would have been outside the data volume —
   for music that is permanent, unlike room files.
+- **A fetch URL belongs to a track, not to a bot.** The token used to live on
+  the bot, so starting the next track revoked the previous one's URL: an Ingress
+  still pulling that track got a 404, reported the track as ended, and the queue
+  advanced — which started the next track and went round again, several times a
+  second. Grants are now per track, carry the file they were minted for (so a
+  fetch can never be answered with whatever the queue moved on to), expire on
+  their own, and are dropped when the bot is deleted. Pinned by
+  `internal/gateway/botstream_test.go`.
+- **`livekit.api_url`** is a new, optional setting: the address *this server*
+  reaches LiveKit at, when it differs from the one clients use. One setting
+  could not serve both audiences — a container reaches LiveKit by a name that
+  means nothing on a user's machine. Empty keeps the old behaviour.
 - **Deleting a bot is idempotent.** A row deleted from the panel without a
   reload left the bot in memory, and delete refused on the missing row, so it
   could never be removed from a client. That is what "a hardcoded bot that will

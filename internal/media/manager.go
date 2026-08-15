@@ -158,4 +158,16 @@ func (m *Manager) CloseRoom(roomID string) {
 	}
 }
 
-func (m *Manager) base() string { return httpBase(m.cfg.String(config.KeyLiveKitURL)) }
+// base is the address *this server* calls LiveKit's API at.
+//
+// It is a separate setting from the one handed to clients because the two
+// audiences do not always agree: a server in a container reaches LiveKit by an
+// internal name that means nothing on a user's machine, and a client reaches it
+// by a public one the server may not be able to route to. When it is empty —
+// the ordinary case — both use the same address.
+func (m *Manager) base() string {
+	if api := strings.TrimSpace(m.cfg.String(config.KeyLiveKitAPIURL)); api != "" {
+		return httpBase(api)
+	}
+	return httpBase(m.cfg.String(config.KeyLiveKitURL))
+}
