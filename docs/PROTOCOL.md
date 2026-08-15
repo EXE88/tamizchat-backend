@@ -700,7 +700,12 @@ The three things that stop it, in the order they bite:
 2. **`network.public_host` must be an address Ingress can reach.** It fetches
    the track from this server, so "localhost" is wrong whenever Ingress runs
    somewhere else — in a container next door, that is `host.docker.internal`.
-3. **The file must be decodable.** A bot whose tracks keep ending within three
+3. **The server paces the file to its playing time.** Ingress stops when the
+   stream ends, so a file sent at full speed ends before the media connection is
+   up and nothing is ever published. This is automatic; a format whose length
+   cannot be read from its header is sent unpaced, which is worth knowing if an
+   exotic container misbehaves.
+4. **The file must be decodable.** A bot whose tracks keep ending within three
    seconds stops itself and logs why, rather than looping through the queue
    forever.
 

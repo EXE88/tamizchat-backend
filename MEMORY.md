@@ -434,6 +434,30 @@ calls a real one refuses.
   working directory. It had been landing in `/data/data/bots` in the container,
   and one `WorkingDirectory=` away it would have been outside the data volume —
   for music that is permanent, unlike room files.
+- **A track is served at the rate it plays, and that is what finally made bots
+  audible.** Ingress pulls the URL the way a listener pulls a radio stream and
+  stops when the stream ends. Handed a local file over a fast connection it read
+  a seventy-second track in *half a second*, reached the end before its own
+  WebRTC connection had finished connecting, and shut down having published
+  nothing:
+
+  ```
+  19:05:24.059  GST pipeline starts
+  19:05:24.556  app sink EOS        ← whole file consumed
+  19:05:25.269  ICE connected       ← too late, the pipeline is already done
+  ```
+
+  `internal/httpapi/paced.go` now serves the body over roughly the track's
+  playing time (`internal/bots/duration.go` reads the length from ogg/opus,
+  flac, wav and mp3 headers; anything else is served unpaced as before).
+  Measured after the fix: **1870 audio frames at a listener**, LiveKit logging
+  `mediaTrack published`, and the queue advancing 39 s later at the natural end
+  of the track.
+
+  Two things about the numbers, both learned the hard way: the burst is measured
+  in **playing time**, not bytes — a fixed 256 KB burst was larger than the whole
+  compressed file and changed nothing — and the delivery must never be slower
+  than the track plays, or a listener hears gaps.
 - **A fetch URL belongs to a track, not to a bot.** The token used to live on
   the bot, so starting the next track revoked the previous one's URL: an Ingress
   still pulling that track got a 404, reported the track as ended, and the queue

@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 
 	"tamizchat/internal/bots"
 	"tamizchat/internal/protocol"
@@ -60,11 +59,22 @@ func (d Deps) handleBotStream(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Cache-Control", "private, no-store")
-	w.Header().Set("Content-Length", strconv.FormatInt(info.Size(), 10))
+
+	// Served at the rate it plays. Ingress treats this URL as a stream and stops
+	// when the stream ends; at full speed it reached the end of the file before
+	// its WebRTC connection was up and published nothing. A duration it cannot
+	// work out means no pacing, which is the old behaviour.
+	playing, ok := bots.TrackDuration(path)
+	if !ok {
+		slog.Debug("serving a bot track without pacing — its length is unknown",
+			"bot", botID, "file", filepath.Base(path))
+	}
+
+	body := newPacedFile(r.Context(), file, info.Size(), playing)
 
 	// ServeContent gives Ingress the range requests it uses to seek, and picks
 	// the content type from the extension.
-	http.ServeContent(w, r, filepath.Base(title+filepath.Ext(path)), info.ModTime(), file)
+	http.ServeContent(w, r, filepath.Base(title+filepath.Ext(path)), info.ModTime(), body)
 }
 
 // handleBotTrackUpload receives one track for a playlist. The ticket, issued
