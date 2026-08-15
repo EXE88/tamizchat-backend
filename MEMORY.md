@@ -54,7 +54,7 @@ played on ban, microphone and listening settings, key bindings for shortcuts.
 
 ## Current status
 
-**All 11 backend phases are done and tested** (244 tests, all green), plus the
+**All 11 backend phases are done and tested** (232 tests, all green), plus the
 post-roadmap work the client's admin panel needs — see "Work added after phase
 11" below.
 The backend is complete as far as the roadmap goes; the project's next step is
@@ -409,71 +409,51 @@ things the wire did not have. Added since:
     default-valued relative path is a case the tests were structurally unable to
     reach.
 
-### The bot audio path had never actually played a note
+### The music bot was rewritten: the server publishes the audio itself
 
-Everything below was found by running it against a real LiveKit and Ingress for
-the first time. Phase 9's tests used a fake LiveKit, which happily accepted
-calls a real one refuses.
+The Ingress design is gone. A bot now joins LiveKit **as a participant** — the
+server connects as `bot-<id>` with a publish-only token — and publishes the
+track's file directly with `livekit/server-sdk-go` (pure Go; it builds with
+CGO_ENABLED=0, which the project requires).
 
-- **The server's own LiveKit token lacked `ingressAdmin`.** `roomAdmin` does not
-  cover the Ingress service, so every CreateIngress answered
-  `401 permissions denied`. Pinned now by `internal/media/grants_test.go`, which
-  decodes the token rather than trusting a fake to check it.
-- **LiveKit's Twirp API answers in snake_case** (`ingress_id`) while its
-  webhooks are camelCase (`ingressId`). Reading only the camelCase spelling made
-  a successfully created ingress look like a failure — and left it running.
-  `IngressInfo` now reads both.
-- **`ResolveTrack` validated the track against `def.Folder`**, the bot's own
-  library, so every track in a playlist was refused: Ingress fetched a 404 and
-  the bot "played" silence. It now checks against whatever the bot plays from.
-- **A bot whose tracks fail instantly used to loop forever.** End-of-track
-  advances the queue, so an undecodable file or an unreachable Ingress produced
-  a new ingress every 1.5 seconds, indefinitely. Three consecutive tracks that
-  end within 3 seconds now stop the bot with an explicit warning.
-- **A relative `bots.dir` is resolved next to the database**, not against the
-  working directory. It had been landing in `/data/data/bots` in the container,
-  and one `WorkingDirectory=` away it would have been outside the data volume —
-  for music that is permanent, unlike room files.
-- **A track is served at the rate it plays, and that is what finally made bots
-  audible.** Ingress pulls the URL the way a listener pulls a radio stream and
-  stops when the stream ends. Handed a local file over a fast connection it read
-  a seventy-second track in *half a second*, reached the end before its own
-  WebRTC connection had finished connecting, and shut down having published
-  nothing:
+Why the rewrite happened, after a long run of fixes that each worked and each
+left something else broken: Ingress pulls a URL the way a listener pulls a radio
+stream, so a local file had to be *served at the rate it plays*. Every failure
+came from that one mismatch —
 
-  ```
-  19:05:24.059  GST pipeline starts
-  19:05:24.556  app sink EOS        ← whole file consumed
-  19:05:25.269  ICE connected       ← too late, the pipeline is already done
-  ```
+- sent at full speed, it reached the end before its WebRTC connection was up and
+  published nothing;
+- sent merely faster than real time, it published timestamps ahead of the clock
+  and listeners heard concealment silence;
+- and the rate depended on measuring each file's duration, which is a guess for
+  a VBR mp3 with no Xing header — a thirty-second track measured eleven, so it
+  went out three times too fast and was silent again.
 
-  `internal/httpapi/paced.go` now serves the body over roughly the track's
-  playing time (`internal/bots/duration.go` reads the length from ogg/opus,
-  flac, wav and mp3 headers; anything else is served unpaced as before).
-  Measured after the fix: **1870 audio frames at a listener**, LiveKit logging
-  `mediaTrack published`, and the queue advancing 39 s later at the natural end
-  of the track.
+Publishing the file ourselves removes the whole class: an Ogg/Opus file already
+holds the packets WebRTC carries, the SDK paces them from the timestamps in the
+file, and there is nothing left to estimate.
 
-  Two things about the numbers, both learned the hard way: the burst is measured
-  in **playing time**, not bytes — a fixed 256 KB burst was larger than the whole
-  compressed file and changed nothing — and the delivery must never be slower
-  than the track plays, or a listener hears gaps.
-- **A fetch URL belongs to a track, not to a bot.** The token used to live on
-  the bot, so starting the next track revoked the previous one's URL: an Ingress
-  still pulling that track got a 404, reported the track as ended, and the queue
-  advanced — which started the next track and went round again, several times a
-  second. Grants are now per track, carry the file they were minted for (so a
-  fetch can never be answered with whatever the queue moved on to), expire on
-  their own, and are dropped when the bot is deleted. Pinned by
-  `internal/gateway/botstream_test.go`.
-- **`livekit.api_url`** is a new, optional setting: the address *this server*
-  reaches LiveKit at, when it differs from the one clients use. One setting
-  could not serve both audiences — a container reaches LiveKit by a name that
-  means nothing on a user's machine. Empty keeps the old behaviour.
-- **Deleting a bot is idempotent.** A row deleted from the panel without a
-  reload left the bot in memory, and delete refused on the missing row, so it
-  could never be removed from a client. That is what "a hardcoded bot that will
-  not delete" actually was.
+What went with it: LiveKit's Ingress service, the redis it needed, the
+`/api/v1/bot-stream` endpoint, the LiveKit webhook and its signature
+verification, the paced reader, the duration parsers, the per-track fetch grants
+and the "tracks keep ending immediately" guard. Roughly a thousand lines, all of
+it working around one wrong seam.
+
+**The constraint that shapes it:** WebRTC carries Opus and there is no pure-Go
+Opus encoder, so tracks must arrive as Ogg/Opus. The **client** converts on
+upload (`TamizChat.Audio/OpusFile.cs` — Media Foundation decodes, Concentus
+encodes), which is where the platform's codecs already are. The server accepts
+`.ogg`/`.opus` only and refuses anything else with `track_not_audio`.
+
+Measured after the rewrite, with a real VBR mp3 converted by the client:
+**6627 audio frames at RMS ~6000, from the first second**, and the queue
+advancing 27.8 s later at the true end of the track — the SDK's completion
+callback, not a webhook.
+
+Dev note: `livekit.dev.yaml` must announce an address both the host client and
+the backend container can reach (`rtc.node_ip` = the machine's LAN address).
+`127.0.0.1` means a different thing in each of them, and the bot's connection
+simply timed out.
 
 ## Final backend status
 

@@ -338,9 +338,9 @@ func (g *Gateway) replyBotError(sess *session.Session, id string, err error) {
 		sess.SendError(id, protocol.ErrPlaylistNameUsed, "that bot already has a playlist by that name")
 	case errors.Is(err, bots.ErrTooManyPlaylists):
 		sess.SendError(id, protocol.ErrPlaylistTooMany, "that bot already has as many playlists as it allows")
-	case errors.Is(err, bots.ErrNotAudio):
+	case errors.Is(err, bots.ErrNotOpus):
 		sess.SendError(id, protocol.ErrTrackNotAudio,
-			"that file is not one of the audio types this server accepts")
+			"a bot plays Ogg/Opus; convert the file before uploading it")
 	case errors.Is(err, bots.ErrTrackNotFound):
 		sess.SendError(id, protocol.ErrTrackNotFound, "that track is not in the playlist")
 	case errors.Is(err, bots.ErrTooLarge):

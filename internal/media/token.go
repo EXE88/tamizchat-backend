@@ -25,19 +25,14 @@ import (
 
 // videoGrant is LiveKit's permission object inside the token.
 type videoGrant struct {
-	Room       string `json:"room,omitempty"`
-	RoomJoin   bool   `json:"roomJoin,omitempty"`
-	RoomAdmin  bool   `json:"roomAdmin,omitempty"`
-	RoomCreate bool   `json:"roomCreate,omitempty"`
-	RoomList   bool   `json:"roomList,omitempty"`
-	// IngressAdmin is required by LiveKit for every call to the Ingress
-	// service. Without it CreateIngress answers 401 "permissions denied" —
-	// which is exactly what a music bot did against a real LiveKit, because
-	// roomAdmin does not cover ingress.
-	IngressAdmin   bool  `json:"ingressAdmin,omitempty"`
-	CanPublish     *bool `json:"canPublish,omitempty"`
-	CanSubscribe   *bool `json:"canSubscribe,omitempty"`
-	CanPublishData *bool `json:"canPublishData,omitempty"`
+	Room           string `json:"room,omitempty"`
+	RoomJoin       bool   `json:"roomJoin,omitempty"`
+	RoomAdmin      bool   `json:"roomAdmin,omitempty"`
+	RoomCreate     bool   `json:"roomCreate,omitempty"`
+	RoomList       bool   `json:"roomList,omitempty"`
+	CanPublish     *bool  `json:"canPublish,omitempty"`
+	CanSubscribe   *bool  `json:"canSubscribe,omitempty"`
+	CanPublishData *bool  `json:"canPublishData,omitempty"`
 	// CanPublishSources narrows publishing to specific sources, which is how
 	// "may talk but may not share their screen" is expressed.
 	CanPublishSources []string `json:"canPublishSources,omitempty"`
@@ -45,19 +40,16 @@ type videoGrant struct {
 
 // claims is the JWT payload LiveKit expects.
 type claims struct {
-	Issuer    string     `json:"iss"`
-	Subject   string     `json:"sub,omitempty"`
-	Name      string     `json:"name,omitempty"`
-	NotBefore int64      `json:"nbf"`
-	Expiry    int64      `json:"exp"`
-	JTI       string     `json:"jti,omitempty"`
-	Video     videoGrant `json:"video"`
-	Metadata  string     `json:"metadata,omitempty"`
-	// SHA256 is only used when signing a webhook, where the claim carries the
-	// hash of the body rather than any grant.
-	SHA256     string `json:"sha256,omitempty"`
-	Identity   string `json:"-"`
-	SharedRoom string `json:"-"`
+	Issuer     string     `json:"iss"`
+	Subject    string     `json:"sub,omitempty"`
+	Name       string     `json:"name,omitempty"`
+	NotBefore  int64      `json:"nbf"`
+	Expiry     int64      `json:"exp"`
+	JTI        string     `json:"jti,omitempty"`
+	Video      videoGrant `json:"video"`
+	Metadata   string     `json:"metadata,omitempty"`
+	Identity   string     `json:"-"`
+	SharedRoom string     `json:"-"`
 }
 
 // Publishable track sources, as LiveKit names them.
@@ -122,6 +114,38 @@ func joinToken(apiKey, apiSecret, room, identity, name string,
 	})
 }
 
+// botTokenTTL bounds a bot's session. It is long: a bot stays in a room until
+// somebody moves it out, and a token that expired mid-set would drop it.
+const botTokenTTL = 12 * time.Hour
+
+// botToken authorizes a music bot to publish audio into one room.
+//
+// It may publish a microphone source and nothing else — no camera, no screen —
+// and it subscribes to nothing at all: a bot has no reason to hear the room, and
+// not subscribing keeps its cost flat however many people are in there.
+func botToken(apiKey, apiSecret, room, identity, name string, ttl time.Duration) (string, error) {
+	publish := true
+	subscribe := false
+
+	now := time.Now()
+	return signToken(apiKey, apiSecret, claims{
+		Issuer:    apiKey,
+		Subject:   identity,
+		Name:      name,
+		NotBefore: now.Add(-30 * time.Second).Unix(),
+		Expiry:    now.Add(ttl).Unix(),
+		JTI:       storage.NewUUID(),
+		Video: videoGrant{
+			Room:              room,
+			RoomJoin:          true,
+			CanPublish:        &publish,
+			CanSubscribe:      &subscribe,
+			CanPublishData:    boolPtr(false),
+			CanPublishSources: []string{sourceMicrophone},
+		},
+	})
+}
+
 // adminToken authorizes the server's own calls to LiveKit's room API.
 func adminToken(apiKey, apiSecret string) (string, error) {
 	now := time.Now()
@@ -131,9 +155,7 @@ func adminToken(apiKey, apiSecret string) (string, error) {
 		NotBefore: now.Add(-30 * time.Second).Unix(),
 		Expiry:    now.Add(2 * time.Minute).Unix(),
 		JTI:       storage.NewUUID(),
-		Video: videoGrant{
-			RoomAdmin: true, RoomList: true, RoomCreate: true, IngressAdmin: true,
-		},
+		Video:     videoGrant{RoomAdmin: true, RoomList: true, RoomCreate: true},
 	})
 }
 

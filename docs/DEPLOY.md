@@ -125,32 +125,25 @@ internal name, or `host.docker.internal` from a container — put that one in
 
 ## The music bot
 
-Bots need LiveKit's **Ingress** service, because TamizChat itself does not
-publish audio.
+A bot needs **nothing beyond LiveKit itself** — no Ingress, no redis. It joins a
+room as a participant and publishes its music there, exactly like a person with
+a microphone.
 
-1. Bring `livekit-ingress` up alongside LiveKit, with **a redis both of them
-   share** — that is how LiveKit finds Ingress, and without it every attempt to
-   play answers with an internal error. `deploy/docker-compose.livekit.dev.yml`
-   is a working example.
-2. Point the LiveKit webhook at this address:
-   `https://<your host>/api/v1/livekit/webhook`
-   Without it, the bot goes quiet after the first track finishes.
-3. **You must set `network.public_host`** — for example
-   `https://chat.example.com`. Ingress has to fetch the music file from your
-   server, and the server cannot guess what address it is reachable at from
-   outside.
-4. Create the bot. Either from **panel option 10**, with a name and a music
-   folder path — the panel tells you right there how many playable files it
-   found — or from the client, by an administrator holding `manage_bots`.
+1. Have LiveKit configured and enabled (above).
+2. Create the bot. Either from **panel option 10**, with a name and a music
+   folder path, or from the client by an administrator holding `manage_bots`.
+3. Fill it from the client: playlists, and tracks uploaded into them.
 
-The file format does not matter (mp3, ogg, flac, m4a, …) — Ingress handles the
-conversion.
+**Tracks are Ogg/Opus.** The client converts whatever you pick — mp3, m4a, wav —
+on the way up, because that is where the codecs are; the server never
+transcodes. A folder configured by hand in the panel should therefore hold
+`.ogg`/`.opus` files, and anything else in it is ignored by the scan.
 
 ### Bots created from a client
 
 A bot created from the client has no folder path: it is given storage of its own
-under `bots.dir` (default `bots`, taken from the database's own folder), and an administrator fills it from the
-client with **playlists** — named groups of tracks, uploaded over HTTP.
+under `bots.dir` (default `bots`, taken from the database's own folder), and an
+administrator fills it from the client with **playlists**.
 
 Two things follow, and both matter for an operator:
 

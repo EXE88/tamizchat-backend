@@ -1,22 +1,12 @@
 package gateway_test
 
 import (
-	"bytes"
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/json"
-	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
-	"tamizchat/internal/config"
-	"tamizchat/internal/media"
 	"tamizchat/internal/protocol"
 	"tamizchat/internal/storage"
 )
@@ -57,14 +47,15 @@ func (f *fixture) addBot(t *testing.T, name, folder string) storage.Bot {
 	return bot
 }
 
-// enableMediaForBots points the server at a fake LiveKit and sets the public
-// host, which Ingress needs in order to fetch anything from us.
-func (f *fixture) enableMediaForBots(t *testing.T, lk *fakeLiveKit) {
+// musicFolderOf is where a bot keeps its music, read back from the database.
+func musicFolderOf(t *testing.T, f *fixture, botID string) string {
 	t.Helper()
-	f.enableMedia(t, lk)
-	if err := f.cfg.Set(context.Background(), config.KeyPublicHost, f.httpURL); err != nil {
-		t.Fatalf("set public host: %v", err)
+
+	bot, err := f.store.GetBot(context.Background(), botID)
+	if err != nil {
+		t.Fatalf("get bot: %v", err)
 	}
+	return bot.Folder
 }
 
 func (c *client) botControl(action, botID string) protocol.Bot {
@@ -77,7 +68,7 @@ func (c *client) botControl(action, botID string) protocol.Bot {
 
 func TestBotsAppearWithTheirQueue(t *testing.T) {
 	f := newFixture(t)
-	folder := musicFolder(t, "a.mp3", "b.ogg", "c.flac")
+	folder := musicFolder(t, "a.ogg", "b.ogg", "c.ogg")
 	bot := f.addBot(t, "DJ", folder)
 
 	alice, _ := f.hello(t, uuidA, "Alice", "")
@@ -103,7 +94,7 @@ func TestBotsAppearWithTheirQueue(t *testing.T) {
 
 func TestBotIsAnnouncedInWelcome(t *testing.T) {
 	f := newFixture(t)
-	f.addBot(t, "DJ", musicFolder(t, "a.mp3"))
+	f.addBot(t, "DJ", musicFolder(t, "a.ogg"))
 
 	_, welcome := f.hello(t, uuidA, "Alice", "")
 	if len(welcome.Bots) != 1 || welcome.Bots[0].Name != "DJ" {
@@ -113,10 +104,9 @@ func TestBotIsAnnouncedInWelcome(t *testing.T) {
 
 func TestMovingABotAndPlaying(t *testing.T) {
 	f := newFixture(t)
-	lk := newFakeLiveKit(t)
-	f.enableMediaForBots(t, lk)
 
-	bot := f.addBot(t, "DJ", musicFolder(t, "one.mp3", "two.mp3"))
+	folder := musicFolder(t, "one.ogg", "two.ogg")
+	bot := f.addBot(t, "DJ", folder)
 	alice, room := f.roomWith(t)
 
 	// Everyone hears about the move, not just whoever asked for it.
@@ -131,6 +121,15 @@ func TestMovingABotAndPlaying(t *testing.T) {
 	}
 	bob.expect(protocol.TypeBotState)
 
+	// A bot in a room is in the media session too, silent until it is told to
+	// play — exactly like somebody who has joined but is not talking.
+	if got := f.audio.roomOf(bot.ID); got != room.ID {
+		t.Fatalf("the bot joined room %q, want %q", got, room.ID)
+	}
+	if _, playing := f.audio.nowPlaying(bot.ID); playing {
+		t.Fatal("a bot that has only been moved must not be playing")
+	}
+
 	playing := alice.botControl(protocol.BotActionPlay, bot.ID)
 	if playing.State != protocol.BotPlaying || playing.Track == nil {
 		t.Fatalf("the bot should be playing something: %+v", playing)
@@ -140,44 +139,23 @@ func TestMovingABotAndPlaying(t *testing.T) {
 	}
 	bob.expect(protocol.TypeBotState)
 
-	// LiveKit was asked to pull the track from this server.
-	call := lk.waitFor(t, "CreateIngress")
-	if call.Body["room_name"] != room.ID {
-		t.Fatalf("the ingress should publish into the room: %+v", call.Body)
+	// And it is the file itself that was handed to the media session.
+	path, ok := f.audio.nowPlaying(bot.ID)
+	if !ok || filepath.Base(path) != "one.ogg" {
+		t.Fatalf("the wrong file is playing: %q", path)
 	}
-	if identity, _ := call.Body["participant_identity"].(string); !strings.HasPrefix(identity, "bot-") {
-		t.Fatalf("a bot identity must not look like a client uuid: %q", identity)
-	}
-
-	streamURL, _ := call.Body["url"].(string)
-	if !strings.Contains(streamURL, "/api/v1/bot-stream/"+bot.ID) {
-		t.Fatalf("unexpected stream url: %q", streamURL)
-	}
-
-	// And that URL really serves the track.
-	resp, err := http.Get(streamURL)
-	if err != nil {
-		t.Fatalf("fetch track: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("the ingress fetch should succeed, got %d", resp.StatusCode)
-	}
-	body, _ := io.ReadAll(resp.Body)
-	if !strings.Contains(string(body), "one.mp3") {
-		t.Fatalf("the wrong track was served: %q", body)
+	if filepath.Dir(path) != folder {
+		t.Fatalf("the file should come from the bot's folder: %q", path)
 	}
 }
 
 func TestNextAndPrevWalkTheQueue(t *testing.T) {
 	f := newFixture(t)
-	lk := newFakeLiveKit(t)
-	f.enableMediaForBots(t, lk)
 
 	// The queue is sorted by file name, which is the order the operator sees
 	// in their own file manager — so the names here are numbered rather than
 	// spelled out.
-	bot := f.addBot(t, "DJ", musicFolder(t, "01 first.mp3", "02 second.mp3", "03 third.mp3"))
+	bot := f.addBot(t, "DJ", musicFolder(t, "01 first.ogg", "02 second.ogg", "03 third.ogg"))
 	alice, room := f.roomWith(t)
 
 	alice.send(protocol.TypeBotMove, "m1", protocol.BotMove{BotID: bot.ID, RoomID: room.ID})
@@ -216,50 +194,46 @@ func TestNextAndPrevWalkTheQueue(t *testing.T) {
 	alice.expectError(protocol.ErrInvalidInput)
 }
 
-func TestStoppingABotEndsTheIngress(t *testing.T) {
+func TestStoppingABotKeepsItInTheRoom(t *testing.T) {
 	f := newFixture(t)
-	lk := newFakeLiveKit(t)
-	f.enableMediaForBots(t, lk)
 
-	bot := f.addBot(t, "DJ", musicFolder(t, "one.mp3"))
+	bot := f.addBot(t, "DJ", musicFolder(t, "one.ogg"))
 	alice, room := f.roomWith(t)
 
 	alice.send(protocol.TypeBotMove, "m1", protocol.BotMove{BotID: bot.ID, RoomID: room.ID})
 	alice.expect(protocol.TypeBotState)
 	alice.botControl(protocol.BotActionPlay, bot.ID)
-	lk.waitFor(t, "CreateIngress")
 
 	stopped := alice.botControl(protocol.BotActionStop, bot.ID)
 	if stopped.State != protocol.BotStopped {
 		t.Fatalf("the bot should be stopped but still in the room: %+v", stopped)
 	}
-	lk.waitFor(t, "DeleteIngress")
 
-	// A stopped bot no longer serves its track: the fetch token is spent.
-	f.expectStreamRefused(t, bot.ID)
+	if _, playing := f.audio.nowPlaying(bot.ID); playing {
+		t.Fatal("stopping must take the track off the media session")
+	}
+	// Still a participant, though: a stopped bot sits in the room like somebody
+	// who has stopped talking, rather than disappearing.
+	if got := f.audio.roomOf(bot.ID); got != room.ID {
+		t.Fatalf("the bot left the room on stop; it is in %q", got)
+	}
 }
 
 // A track that runs out must move the queue on by itself, or a music bot would
-// play exactly one song.
+// play exactly one song. The publisher says so directly now — there is no
+// webhook, and no round trip through LiveKit, so the server can tell "the track
+// ended" apart from "somebody pressed skip".
 func TestTrackEndAdvancesTheQueue(t *testing.T) {
 	f := newFixture(t)
-	lk := newFakeLiveKit(t)
-	f.enableMediaForBots(t, lk)
 
-	bot := f.addBot(t, "DJ", musicFolder(t, "01 first.mp3", "02 second.mp3"))
+	bot := f.addBot(t, "DJ", musicFolder(t, "01 first.ogg", "02 second.ogg"))
 	alice, room := f.roomWith(t)
 
 	alice.send(protocol.TypeBotMove, "m1", protocol.BotMove{BotID: bot.ID, RoomID: room.ID})
 	alice.expect(protocol.TypeBotState)
 	alice.botControl(protocol.BotActionPlay, bot.ID)
 
-	call := lk.waitFor(t, "CreateIngress")
-	ingressID, _ := call.Reply["ingressId"].(string)
-	if ingressID == "" {
-		t.Fatal("the fake LiveKit should have returned an ingress id")
-	}
-
-	f.postWebhook(t, media.EventIngressEnded, ingressID, http.StatusOK)
+	f.audio.finishTrack(t, bot.ID)
 
 	var view protocol.Bot
 	alice.decode(alice.expect(protocol.TypeBotState), &view)
@@ -269,37 +243,14 @@ func TestTrackEndAdvancesTheQueue(t *testing.T) {
 	if view.State != protocol.BotPlaying {
 		t.Fatalf("and kept playing, got %q", view.State)
 	}
-}
 
-// The webhook endpoint has no other authentication, so an unsigned request must
-// change nothing at all.
-func TestUnsignedWebhookIsRejected(t *testing.T) {
-	f := newFixture(t)
-	lk := newFakeLiveKit(t)
-	f.enableMediaForBots(t, lk)
-
-	body, _ := json.Marshal(map[string]any{
-		"event":       media.EventIngressEnded,
-		"ingressInfo": map[string]string{"ingressId": "made-up"},
-	})
-
-	resp, err := http.Post(f.httpURL+"/api/v1/livekit/webhook", "application/json",
-		strings.NewReader(string(body)))
-	if err != nil {
-		t.Fatalf("post webhook: %v", err)
-	}
-	resp.Body.Close()
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("an unsigned webhook should be refused, got %d", resp.StatusCode)
-	}
+	f.audio.waitForPlaying(t, bot.ID, filepath.Join(musicFolderOf(t, f, bot.ID), "02 second.ogg"))
 }
 
 func TestBotControlNeedsPermission(t *testing.T) {
 	f := newFixture(t)
-	lk := newFakeLiveKit(t)
-	f.enableMediaForBots(t, lk)
 
-	bot := f.addBot(t, "DJ", musicFolder(t, "one.mp3"))
+	bot := f.addBot(t, "DJ", musicFolder(t, "one.ogg"))
 	alice, room := f.roomWith(t)
 	bob := f.inRoom(t, uuidB, "Bob", room.ID)
 	alice.expect(protocol.TypeUserJoined)
@@ -321,10 +272,8 @@ func TestBotControlNeedsPermission(t *testing.T) {
 
 func TestPlayingNeedsARoomAndMusic(t *testing.T) {
 	f := newFixture(t)
-	lk := newFakeLiveKit(t)
-	f.enableMediaForBots(t, lk)
 
-	bot := f.addBot(t, "DJ", musicFolder(t, "one.mp3"))
+	bot := f.addBot(t, "DJ", musicFolder(t, "one.ogg"))
 	empty := f.addBot(t, "Empty", t.TempDir())
 
 	alice, room := f.roomWith(t)
@@ -346,7 +295,8 @@ func TestPlayingNeedsARoomAndMusic(t *testing.T) {
 
 func TestPlayingNeedsMediaConfigured(t *testing.T) {
 	f := newFixture(t)
-	bot := f.addBot(t, "DJ", musicFolder(t, "one.mp3"))
+	f.audio.SetEnabled(false)
+	bot := f.addBot(t, "DJ", musicFolder(t, "one.ogg"))
 	alice, room := f.roomWith(t)
 
 	alice.send(protocol.TypeBotMove, "m1", protocol.BotMove{BotID: bot.ID, RoomID: room.ID})
@@ -359,64 +309,24 @@ func TestPlayingNeedsMediaConfigured(t *testing.T) {
 	alice.expectError(protocol.ErrMediaDisabled)
 }
 
-// Playing needs a URL that LiveKit can actually reach, which the server cannot
-// guess from a bare listen address.
-func TestPlayingNeedsThePublicHost(t *testing.T) {
-	f := newFixture(t)
-	lk := newFakeLiveKit(t)
-	f.enableMedia(t, lk) // deliberately without the public host
-
-	bot := f.addBot(t, "DJ", musicFolder(t, "one.mp3"))
-	alice, room := f.roomWith(t)
-
-	alice.send(protocol.TypeBotMove, "m1", protocol.BotMove{BotID: bot.ID, RoomID: room.ID})
-	alice.expect(protocol.TypeBotState)
-	alice.send(protocol.TypeBotControl, "b1", protocol.BotControl{
-		BotID: bot.ID, Action: protocol.BotActionPlay,
-	})
-	e := alice.expectError(protocol.ErrInvalidInput)
-	if !strings.Contains(e.Message, "Public host") {
-		t.Fatalf("the error should tell the operator what to configure: %q", e.Message)
-	}
-}
-
-// The stream endpoint is the one place a path from disk reaches the network,
-// so a wrong or missing token must reveal nothing.
-func TestBotStreamNeedsTheCurrentToken(t *testing.T) {
-	f := newFixture(t)
-	lk := newFakeLiveKit(t)
-	f.enableMediaForBots(t, lk)
-
-	bot := f.addBot(t, "DJ", musicFolder(t, "one.mp3"))
-	f.expectStreamRefused(t, bot.ID)
-
-	resp, err := http.Get(f.httpURL + "/api/v1/bot-stream/" + bot.ID + "?token=guessed")
-	if err != nil {
-		t.Fatalf("get: %v", err)
-	}
-	resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("a made-up token should get nothing, got %d", resp.StatusCode)
-	}
-}
-
 func TestDeletingARoomSendsItsBotsHome(t *testing.T) {
 	f := newFixture(t)
-	lk := newFakeLiveKit(t)
-	f.enableMediaForBots(t, lk)
 
-	bot := f.addBot(t, "DJ", musicFolder(t, "one.mp3"))
+	bot := f.addBot(t, "DJ", musicFolder(t, "one.ogg"))
 	alice, room := f.roomWith(t)
 
 	alice.send(protocol.TypeBotMove, "m1", protocol.BotMove{BotID: bot.ID, RoomID: room.ID})
 	alice.expect(protocol.TypeBotState)
 	alice.botControl(protocol.BotActionPlay, bot.ID)
-	lk.waitFor(t, "CreateIngress")
 
 	alice.send(protocol.TypeRoomDelete, "d1", protocol.RoomDelete{RoomID: room.ID})
 	alice.expectFrames(protocol.TypeRoomLeft, protocol.TypeRoomDeleted, protocol.TypeBotState)
 
-	lk.waitFor(t, "DeleteIngress")
+	// It leaves the media session with the room.
+	if got := f.audio.roomOf(bot.ID); got != "" {
+		t.Fatalf("the bot is still in media room %q", got)
+	}
+
 	for _, view := range f.bots.Views() {
 		if view.ID == bot.ID && (view.RoomID != "" || view.State != protocol.BotIdle) {
 			t.Fatalf("the bot should have left the deleted room: %+v", view)
@@ -424,66 +334,7 @@ func TestDeletingARoomSendsItsBotsHome(t *testing.T) {
 	}
 }
 
-// postWebhook signs a LiveKit webhook the way LiveKit does — a JWT whose
-// sha256 claim is the hash of the body — and posts it. Signing independently
-// here is deliberate: it checks the server's verification against the spec
-// rather than against its own signing code.
-func (f *fixture) postWebhook(t *testing.T, event, ingressID string, wantStatus int) {
-	t.Helper()
-
-	body, err := json.Marshal(map[string]any{
-		"event":       event,
-		"ingressInfo": map[string]string{"ingressId": ingressID},
-	})
-	if err != nil {
-		t.Fatalf("encode webhook: %v", err)
-	}
-
-	sum := sha256.Sum256(body)
-	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"HS256","typ":"JWT"}`))
-	claims, _ := json.Marshal(map[string]any{
-		"iss":    "test-key",
-		"exp":    time.Now().Add(time.Minute).Unix(),
-		"sha256": base64.StdEncoding.EncodeToString(sum[:]),
-	})
-	signing := header + "." + base64.RawURLEncoding.EncodeToString(claims)
-
-	mac := hmac.New(sha256.New, []byte("test-secret"))
-	mac.Write([]byte(signing))
-	token := signing + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
-
-	req, err := http.NewRequest(http.MethodPost, f.httpURL+"/api/v1/livekit/webhook",
-		bytes.NewReader(body))
-	if err != nil {
-		t.Fatalf("build webhook request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/webhook+json")
-	req.Header.Set("Authorization", token)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("post webhook: %v", err)
-	}
-	resp.Body.Close()
-	if resp.StatusCode != wantStatus {
-		t.Fatalf("webhook status = %d, want %d", resp.StatusCode, wantStatus)
-	}
-}
-
-// expectStreamRefused checks that the bot's audio is not served without a token.
-func (f *fixture) expectStreamRefused(t *testing.T, botID string) {
-	t.Helper()
-	resp, err := http.Get(f.httpURL + "/api/v1/bot-stream/" + botID)
-	if err != nil {
-		t.Fatalf("get: %v", err)
-	}
-	resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("an untokenized fetch should get nothing, got %d", resp.StatusCode)
-	}
-}
-
-// ptr is the shorthand the optional fields of a BotSpec need.
+// ptr is for the optional fields of a BotSpec, where nil means "leave alone".
 func ptr[T any](v T) *T { return &v }
 
 func TestBotCreateUpdateDeleteOverTheSocket(t *testing.T) {
@@ -576,7 +427,7 @@ func TestBotLifecycleReachesEveryone(t *testing.T) {
 
 func TestBotLifecycleNeedsManageBots(t *testing.T) {
 	f := newFixture(t)
-	bot := f.addBot(t, "DJ", musicFolder(t, "one.mp3"))
+	bot := f.addBot(t, "DJ", musicFolder(t, "one.ogg"))
 
 	// Bob holds only the default role. Controlling bots and managing them are
 	// separate permissions, so granting him control must not let him delete one.
@@ -613,10 +464,8 @@ func TestBotCreateRejectsABadName(t *testing.T) {
 
 func TestDisablingABotStopsIt(t *testing.T) {
 	f := newFixture(t)
-	lk := newFakeLiveKit(t)
-	f.enableMediaForBots(t, lk)
 
-	bot := f.addBot(t, "DJ", musicFolder(t, "one.mp3"))
+	bot := f.addBot(t, "DJ", musicFolder(t, "one.ogg"))
 	alice, room := f.roomWith(t)
 
 	alice.send(protocol.TypeBotMove, "m1", protocol.BotMove{BotID: bot.ID, RoomID: room.ID})
@@ -637,5 +486,7 @@ func TestDisablingABotStopsIt(t *testing.T) {
 	if disabled.State == protocol.BotPlaying {
 		t.Fatalf("a disabled bot must stop playing, got %+v", disabled)
 	}
-	lk.waitFor(t, "DeleteIngress")
+	if _, playing := f.audio.nowPlaying(bot.ID); playing {
+		t.Fatal("and its music must actually stop, not just its state")
+	}
 }

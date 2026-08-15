@@ -178,9 +178,7 @@ func (m *Manager) Delete(ctx context.Context, botID string) error {
 		m.mu.Unlock()
 		return ErrNotFound
 	}
-	ingressID := b.ingressID
 	name := b.def.Name
-	m.dropGrantsLocked(botID)
 	m.mu.Unlock()
 
 	// A row that has already gone is not a failure: the caller asked for this
@@ -204,7 +202,9 @@ func (m *Manager) Delete(ctx context.Context, botID string) error {
 	}
 	m.mu.Unlock()
 
-	m.stopIngress(ctx, ingressID)
+	// It leaves the room the way a person would, before its music is deleted
+	// from under it.
+	m.audio.Leave(botID)
 
 	// Only the folder we made — which is where every playlist lives — is
 	// removed. It is ours by construction, so there is nothing of anyone else's

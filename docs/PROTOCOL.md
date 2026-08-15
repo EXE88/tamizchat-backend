@@ -588,10 +588,8 @@ paint panel.
 ## Bots
 
 A music bot sits in a room like an ordinary participant and plays from a folder
-of tracks. **The audio does not pass through this server**: LiveKit's Ingress
-service fetches the file from an HTTP endpoint on this server, transcodes it, and
-publishes it into the room itself. This server decides *what* plays and *where*,
-not how the bytes move.
+of tracks — and it *is* an ordinary participant: the server joins LiveKit on its
+behalf and publishes the music there itself.
 
 The `Bot` shape:
 
@@ -682,56 +680,32 @@ ceiling for one track.
 
 ### What is deliberately missing
 
-- **There is no pause.** With Ingress, stopping means closing the stream;
-  resuming restarts the track from the **beginning**. A pause button that jumps
-  out of the middle of a song is worse than no button. `stop` exists and is
-  honest.
+- **There is no pause yet.** `stop` ends the track and playing starts it again
+  from the beginning. Now that the server publishes the audio itself this is a
+  small thing to add — it needs the read position kept — rather than the
+  impossibility it used to be.
 - **There is no server-side volume control.** Each listener sets a participant's
   volume in their own client (LiveKit supports this) — which is better anyway:
   everyone adjusts the bot for themselves, not for the whole room.
 
-### If a bot will not play
+### How a bot plays
 
-The three things that stop it, in the order they bite:
+A bot is **a participant like any other**. When it is moved into a room the
+server joins LiveKit as `bot-<id>` with a token that may publish a microphone
+source and subscribe to nothing, and playing publishes the track's file straight
+into that session.
 
-1. **LiveKit's Ingress service must be running** and sharing a redis with
-   LiveKit. Without it CreateIngress fails and `bot.control play` answers
-   `internal_error`.
-2. **`network.public_host` must be an address Ingress can reach.** It fetches
-   the track from this server, so "localhost" is wrong whenever Ingress runs
-   somewhere else — in a container next door, that is `host.docker.internal`.
-3. **The server paces the file to its playing time.** Ingress stops when the
-   stream ends, so a file sent at full speed ends before the media connection is
-   up and nothing is ever published. This is automatic; a format whose length
-   cannot be read from its header is sent unpaced, which is worth knowing if an
-   exotic container misbehaves.
-4. **The file must be decodable.** A bot whose tracks keep ending within three
-   seconds stops itself and logs why, rather than looping through the queue
-   forever.
+The file is **Ogg/Opus, and only that**. An Ogg/Opus file already holds exactly
+the packets WebRTC carries, so the server hands them over untouched: nothing on
+the server decodes or re-encodes anything, and there is no delivery rate to get
+right. Anything else — an mp3, an m4a — is converted **by the client** before it
+is uploaded, where the platform's codecs already are. A track uploaded in any
+other format is refused with `track_not_audio`.
 
-### Setup
+Two things follow from the bot being a real participant:
 
-1. Create the bot from the admin panel (option 10): a name and a music folder
-   path. The panel says right there how many playable files it found, so a typo
-   in the path is visible immediately.
-2. Set `network.public_host`. Ingress has to fetch the file from this server, and
-   the server cannot guess what address it is reachable at from outside.
-3. LiveKit and its **Ingress** service must be up, and the LiveKit webhook must
-   point at this server's `POST /api/v1/livekit/webhook`.
+- The end of a track is known locally, the moment the file runs out, so the queue
+  advances without asking LiveKit anything. There is no webhook.
+- Nothing fetches music over HTTP. LiveKit's Ingress service, and the redis it
+  needs, are not part of this at all.
 
-The file format does not matter (mp3, ogg, flac, m4a, …) — Ingress handles the
-conversion.
-
-### The webhook
-
-`POST /api/v1/livekit/webhook` is the only way the server learns that a track
-finished and the next one should start. LiveKit's signature (a JWT whose `sha256`
-claim equals the body hash) is verified **before anything else happens**; this
-endpoint has no other authentication, so an unsigned request changes nothing.
-
-### The music file
-
-`GET /api/v1/bot-stream/{bot_id}?token=…` has exactly one consumer: Ingress. The
-token is single-use for that one playback and is invalidated by `stop`. The file
-path never comes from the client — it is derived from the queue index and
-re-checked to be inside the bot's configured folder.

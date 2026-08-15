@@ -7,25 +7,16 @@
 # needed for every phase, LiveKit only for the media ones, and LiveKit is the
 # part most likely to need restarting while its config is being tuned.
 #
+# There is no Ingress and no redis here any more. A music bot joins LiveKit as
+# an ordinary participant and publishes its own audio, so the transcoding
+# service it used to need is gone from the stack entirely.
+#
 # Bridge networking with published ports, not host networking. See
 # livekit.dev.yaml for why that works here and would not work on a real server.
 
 name: tamizchat-livekit-dev
 
 services:
-  # Ingress keeps its state in redis and finds LiveKit through it; LiveKit is
-  # pointed at the same instance. Without redis the two never see each other and
-  # every CreateIngress call times out.
-  redis:
-    image: redis:7-alpine
-    container_name: tamizchat-redis-dev
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-
   livekit:
     image: livekit/livekit-server:latest
     container_name: tamizchat-livekit-dev
@@ -53,52 +44,3 @@ services:
       timeout: 3s
       retries: 5
       start_period: 5s
-
-  # What actually plays a music bot's audio. TamizChat hands it a URL on the
-  # backend and Ingress fetches, transcodes and publishes the track itself —
-  # the backend never touches a sample.
-  #
-  # The URL it fetches comes from `network.public_host`, which in dev must be
-  # http://host.docker.internal:8080: "localhost" from inside this container is
-  # this container, not the backend.
-  ingress:
-    image: livekit/ingress:latest
-    container_name: tamizchat-ingress-dev
-    restart: unless-stopped
-    depends_on:
-      redis:
-        condition: service_healthy
-      livekit:
-        condition: service_healthy
-    # Ingress shares LiveKit's network namespace on purpose.
-    #
-    # livekit.dev.yaml announces 127.0.0.1 as the media address, because that is
-    # the only address the WinUI client on the host can reach. From a separate
-    # container that address is the container itself, so Ingress connected,
-    # published nothing, and logged "Failed to ping without candidate pairs" —
-    # signalling worked and no audio ever arrived. Sharing the namespace makes
-    # 127.0.0.1 mean the same thing on both sides.
-    network_mode: "service:livekit"
-    environment:
-      INGRESS_CONFIG_BODY: |
-        log_level: info
-        api_key: APIdevtamizchat
-        api_secret: devsecret-tamizchat-local-only-do-not-ship-0123456789
-        ws_url: ws://127.0.0.1:7880
-        redis:
-          address: redis:6379
-        health_port: 8090
-        # Without these, Ingress reports a maximum capacity of zero and refuses
-        # every request before it starts — the logs say "url input requirement
-        # too low" and nothing else happens.
-        cpu_cost:
-          rtmp_cpu_cost: 1
-          whip_cpu_cost: 1
-          whip_bypass_transcoding_cpu_cost: 0.1
-          url_cpu_cost: 1
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8090"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-      start_period: 10s

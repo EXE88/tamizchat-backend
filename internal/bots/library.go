@@ -1,10 +1,14 @@
 // Package bots runs the server's bots. Today that means music bots: a named
 // participant that sits in a room and plays a folder of audio files.
 //
-// The audio itself never passes through this server. LiveKit's Ingress service
-// pulls each track from an HTTP endpoint here — an ordinary file download — and
-// does the transcoding and publishing. This server decides *what* plays and
-// *where*; it does not touch a single sample.
+// A bot is a LiveKit participant like any other: the server joins on its behalf
+// and publishes the music itself, straight from the file. Tracks are Ogg/Opus,
+// which is exactly what WebRTC carries, so nothing here decodes or re-encodes a
+// single sample — the packets are handed over as they are found on disk.
+//
+// Anything else is converted by the client before it is uploaded, where the
+// platform's codecs already live. That is the whole design: one format on the
+// server, no transcoding service, and no rate to keep in step.
 package bots
 
 import (
@@ -19,17 +23,17 @@ import (
 // the server's memory on filenames.
 const maxTracks = 5000
 
-// audioExtensions are the files a scan will pick up. Ingress transcodes them,
-// so the list is about what is plausibly music, not about what Go can decode.
+// audioExtensions are the files a scan will pick up.
+//
+// Ogg only, and that is a deliberate consequence of how a bot plays now: it is
+// a LiveKit participant publishing its own audio, and WebRTC carries Opus. An
+// Ogg/Opus file already holds exactly those packets, so the server hands them
+// over untouched — nothing decodes, nothing re-encodes, and there is no rate to
+// guess at. Anything else is converted by the client before it is uploaded,
+// where the codecs already live.
 var audioExtensions = map[string]bool{
-	".mp3":  true,
 	".ogg":  true,
 	".opus": true,
-	".flac": true,
-	".m4a":  true,
-	".aac":  true,
-	".wav":  true,
-	".wma":  true,
 }
 
 // Track is one playable file.

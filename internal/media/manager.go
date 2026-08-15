@@ -101,6 +101,46 @@ func (m *Manager) IssueToken(sess *session.Session) (protocol.MediaToken, error)
 	}, nil
 }
 
+// BotCredentials is what a music bot needs to join LiveKit as a participant of
+// its own: the address, and a token that may publish audio and nothing else.
+type BotCredentials struct {
+	URL      string
+	Token    string
+	Room     string
+	Identity string
+}
+
+// IssueBotToken authorizes a bot to publish into a room.
+//
+// A bot is a participant like any other — that is the whole point of the design
+// — but it only ever sends: it publishes its music and subscribes to nothing,
+// so a room full of people costs it nothing and it can never be made to listen.
+func (m *Manager) IssueBotToken(roomID, identity, name string) (BotCredentials, error) {
+	if !m.Enabled() {
+		return BotCredentials{}, ErrDisabled
+	}
+	if roomID == "" {
+		return BotCredentials{}, ErrNotInRoom
+	}
+
+	token, err := botToken(
+		m.cfg.String(config.KeyLiveKitAPIKey),
+		m.cfg.String(config.KeyLiveKitAPISecret),
+		roomID, identity, name, botTokenTTL)
+	if err != nil {
+		return BotCredentials{}, err
+	}
+
+	// The bot runs inside this server, so it reaches LiveKit at the server's own
+	// address rather than the one handed to clients.
+	url := strings.TrimSpace(m.cfg.String(config.KeyLiveKitAPIURL))
+	if url == "" {
+		url = m.cfg.String(config.KeyLiveKitURL)
+	}
+
+	return BotCredentials{URL: url, Token: token, Room: roomID, Identity: identity}, nil
+}
+
 // Disconnect removes a participant from a room's media session. It is called
 // whenever someone leaves a room, is moved, kicked or banned: without it a
 // kicked user would keep talking to a room they can no longer see.

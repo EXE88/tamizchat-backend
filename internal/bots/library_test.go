@@ -20,7 +20,7 @@ func write(t *testing.T, dir, name string) string {
 
 func TestScanPicksUpAudioAndIgnoresTheRest(t *testing.T) {
 	dir := t.TempDir()
-	write(t, dir, "song.mp3")
+	write(t, dir, "song.ogg")
 	write(t, dir, "tune.OGG") // the extension check is case-insensitive
 	write(t, dir, "cover.jpg")
 	write(t, dir, "notes.txt")
@@ -42,9 +42,9 @@ func TestScanPicksUpAudioAndIgnoresTheRest(t *testing.T) {
 // People organise music in album folders, so a scan has to go down the tree.
 func TestScanIncludesSubfolders(t *testing.T) {
 	dir := t.TempDir()
-	write(t, dir, "a.mp3")
-	write(t, dir, filepath.Join("album", "b.mp3"))
-	write(t, dir, filepath.Join("album", "disc2", "c.mp3"))
+	write(t, dir, "a.ogg")
+	write(t, dir, filepath.Join("album", "b.ogg"))
+	write(t, dir, filepath.Join("album", "disc2", "c.ogg"))
 
 	tracks, err := scanFolder(dir)
 	if err != nil {
@@ -70,7 +70,7 @@ func TestScanRejectsBadFolders(t *testing.T) {
 		t.Fatal("a missing folder should be an error")
 	}
 
-	file := write(t, t.TempDir(), "a.mp3")
+	file := write(t, t.TempDir(), "a.ogg")
 	if _, err := scanFolder(file); err == nil {
 		t.Fatal("a file is not a folder")
 	}
@@ -90,8 +90,8 @@ func TestEmptyFolderScansCleanly(t *testing.T) {
 // check that no path outside the configured folder can ever be served.
 func TestWithinRoot(t *testing.T) {
 	root := t.TempDir()
-	inside := write(t, root, filepath.Join("album", "song.mp3"))
-	outside := write(t, t.TempDir(), "other.mp3")
+	inside := write(t, root, filepath.Join("album", "song.ogg"))
+	outside := write(t, t.TempDir(), "other.ogg")
 
 	if !withinRoot(root, inside) {
 		t.Fatal("a file in a subfolder is inside the root")
@@ -99,7 +99,7 @@ func TestWithinRoot(t *testing.T) {
 	if withinRoot(root, outside) {
 		t.Fatal("a file in another folder is not")
 	}
-	if withinRoot(root, filepath.Join(root, "..", "escape.mp3")) {
+	if withinRoot(root, filepath.Join(root, "..", "escape.ogg")) {
 		t.Fatal("a path climbing out of the root must be refused")
 	}
 }

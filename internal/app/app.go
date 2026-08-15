@@ -92,7 +92,7 @@ func Run(ctx context.Context, opts Options) error {
 
 	paintMgr := paint.NewManager(cfg, roomMgr, accessMgr, accessMgr)
 
-	botMgr, err := bots.New(ctx, cfg, store, mediaMgr, roomMgr, sessions)
+	botMgr, err := bots.New(ctx, cfg, store, bots.NewPublisher(mediaMgr), roomMgr, sessions)
 	if err != nil {
 		return err
 	}
@@ -130,7 +130,6 @@ func Run(ctx context.Context, opts Options) error {
 		MaxTrackBytes: func() int64 {
 			return int64(cfg.Int(config.KeyBotsMaxTrackMB)) << 20
 		},
-		Webhooks: webhookRouter{media: mediaMgr, bots: botMgr},
 	})
 
 	addr := cfg.String(config.KeyListenAddr)

@@ -33,7 +33,6 @@ var (
 	ErrPlaylistNotFound = errors.New("playlist not found")
 	ErrPlaylistTaken    = errors.New("playlist name already used")
 	ErrTooManyPlaylists = errors.New("too many playlists")
-	ErrNotAudio         = errors.New("that file is not audio")
 	ErrTrackNotFound    = errors.New("track not found")
 	ErrTooLarge         = errors.New("file too large")
 	ErrQuotaFull        = errors.New("the bot's music storage is full")
@@ -177,7 +176,7 @@ func (m *Manager) DeletePlaylist(ctx context.Context, actorUUID string, spec pro
 
 	if wasActive {
 		// Selecting nothing stops playback first, so the folder is not being
-		// read by Ingress while it is deleted.
+		// read while it is deleted.
 		if _, err := m.SelectPlaylist(ctx, actorUUID, protocol.BotPlaylistSpec{BotID: def.BotID}); err != nil {
 			return err
 		}
@@ -320,7 +319,7 @@ func (m *Manager) UploadTrack(ctx context.Context, token string, body io.Reader)
 	// The name was cleaned of separators, but the check that it really landed
 	// inside the folder is cheap and is the one that matters.
 	if !withinRoot(dir, path) {
-		return protocol.Bot{}, ErrNotAudio
+		return protocol.Bot{}, ErrNotOpus
 	}
 
 	size, err := writeLimited(path, body, t.maxSize)
@@ -469,8 +468,8 @@ func (m *Manager) rescanLocked(b *bot) {
 	tracks, err := scanFolder(m.sourceDirLocked(b))
 	if err != nil {
 		// A folder that cannot be read means an empty queue, not a stale one:
-		// playing tracks that are no longer there would fail at Ingress with a
-		// far less obvious message.
+		// playing tracks that are no longer there would fail at publish time with
+		// a far less obvious message.
 		b.tracks = nil
 	} else {
 		b.tracks = tracks
@@ -545,7 +544,7 @@ func trackFileName(raw string) (string, error) {
 		name = string(runes[:120-len([]rune(ext))]) + ext
 	}
 	if !audioExtensions[strings.ToLower(filepath.Ext(name))] {
-		return "", ErrNotAudio
+		return "", ErrNotOpus
 	}
 	return name, nil
 }

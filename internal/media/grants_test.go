@@ -5,20 +5,54 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 )
 
-// TestAdminTokenCarriesIngressAdmin pins a grant a fake LiveKit cannot check
-// for us.
+// TestBotTokenPublishesAndNothingElse pins what a music bot is allowed to do.
 //
-// The server's own API token used to carry roomAdmin only. Every room call
-// worked, so the tests passed and the fake never complained — but a real
-// LiveKit answers CreateIngress with 401 "permissions denied" unless the token
-// says ingressAdmin, which meant a music bot could never play a single note.
-func TestAdminTokenCarriesIngressAdmin(t *testing.T) {
+// A bot joins LiveKit as a participant of its own and publishes its music. It
+// must be able to send a microphone source and nothing else — no camera, no
+// screen — and it must not subscribe at all: a bot has no reason to hear the
+// room, and not subscribing keeps its cost flat however many people are in
+// there.
+func TestBotTokenPublishesAndNothingElse(t *testing.T) {
+	token, err := botToken("APIkey", "secret-that-is-long-enough-for-hs256",
+		"room-1", "bot-42", "DJ", time.Hour)
+	if err != nil {
+		t.Fatalf("bot token: %v", err)
+	}
+
+	grant := decodeGrant(t, token)
+
+	if grant.Room != "room-1" || !grant.RoomJoin {
+		t.Fatalf("the token should admit the bot to its room: %+v", grant)
+	}
+	if grant.CanPublish == nil || !*grant.CanPublish {
+		t.Fatal("a bot that cannot publish has no purpose")
+	}
+	if grant.CanSubscribe == nil || *grant.CanSubscribe {
+		t.Fatal("a bot must not subscribe to anybody")
+	}
+	if len(grant.CanPublishSources) != 1 || grant.CanPublishSources[0] != sourceMicrophone {
+		t.Fatalf("a bot publishes audio only: %+v", grant.CanPublishSources)
+	}
+}
+
+// TestAdminTokenIsRoomAdminOnly: the server's own API token administers rooms.
+func TestAdminTokenIsRoomAdminOnly(t *testing.T) {
 	token, err := adminToken("APIkey", "secret-that-is-long-enough-for-hs256")
 	if err != nil {
 		t.Fatalf("admin token: %v", err)
 	}
+
+	grant := decodeGrant(t, token)
+	if !grant.RoomAdmin || !grant.RoomCreate || !grant.RoomList {
+		t.Fatalf("the room grants must stay as they were: %+v", grant)
+	}
+}
+
+func decodeGrant(t *testing.T, token string) videoGrant {
+	t.Helper()
 
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
@@ -31,21 +65,10 @@ func TestAdminTokenCarriesIngressAdmin(t *testing.T) {
 	}
 
 	var payload struct {
-		Video struct {
-			RoomAdmin    bool `json:"roomAdmin"`
-			RoomCreate   bool `json:"roomCreate"`
-			RoomList     bool `json:"roomList"`
-			IngressAdmin bool `json:"ingressAdmin"`
-		} `json:"video"`
+		Video videoGrant `json:"video"`
 	}
 	if err := json.Unmarshal(raw, &payload); err != nil {
 		t.Fatalf("parse claims: %v", err)
 	}
-
-	if !payload.Video.IngressAdmin {
-		t.Fatal("the server token must carry ingressAdmin, or music bots cannot publish")
-	}
-	if !payload.Video.RoomAdmin || !payload.Video.RoomCreate || !payload.Video.RoomList {
-		t.Fatalf("the room grants must stay as they were: %+v", payload.Video)
-	}
+	return payload.Video
 }

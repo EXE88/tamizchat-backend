@@ -71,7 +71,7 @@ func TestPlaylistLifecycleAndUpload(t *testing.T) {
 		t.Fatalf("playlist came back wrong: %+v", list)
 	}
 
-	resp, view := f.uploadTrack(t, alice, bot.ID, list.ID, "one.mp3", []byte("fake audio"))
+	resp, view := f.uploadTrack(t, alice, bot.ID, list.ID, "one.ogg", []byte("fake audio"))
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("upload status = %d, want 200", resp.StatusCode)
 	}
@@ -156,7 +156,7 @@ func TestUploadRejectsWhatIsNotMusic(t *testing.T) {
 
 	// A traversal attempt ending in an accepted extension must still land inside
 	// the playlist folder.
-	resp, _ := f.uploadTrack(t, alice, bot.ID, list.ID, "../escape.mp3", []byte("fake audio"))
+	resp, _ := f.uploadTrack(t, alice, bot.ID, list.ID, "../escape.ogg", []byte("fake audio"))
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("upload status = %d, want 200", resp.StatusCode)
 	}
@@ -169,15 +169,15 @@ func TestUploadRejectsWhatIsNotMusic(t *testing.T) {
 	// the playlist is a folder in there.
 	root := filepath.Dir(stored.Folder)
 	for _, escaped := range []string{
-		filepath.Join(root, "escape.mp3"),
-		filepath.Join(filepath.Dir(root), "escape.mp3"),
-		filepath.Join(stored.Folder, "escape.mp3"),
+		filepath.Join(root, "escape.ogg"),
+		filepath.Join(filepath.Dir(root), "escape.ogg"),
+		filepath.Join(stored.Folder, "escape.ogg"),
 	} {
 		if _, err := os.Stat(escaped); !os.IsNotExist(err) {
 			t.Fatalf("a track escaped its playlist folder: %s", escaped)
 		}
 	}
-	if _, err := os.Stat(filepath.Join(root, list.ID, "escape.mp3")); err != nil {
+	if _, err := os.Stat(filepath.Join(root, list.ID, "escape.ogg")); err != nil {
 		t.Fatalf("the track should be inside the playlist folder: %v", err)
 	}
 }
@@ -190,7 +190,7 @@ func TestPlaylistTicketIsSingleUse(t *testing.T) {
 	list := alice.createPlaylist(bot.ID, "Party")
 
 	alice.send(protocol.TypeBotTrackUpload, "tu", protocol.BotTrackUploadRequest{
-		BotID: bot.ID, PlaylistID: list.ID, Name: "one.mp3",
+		BotID: bot.ID, PlaylistID: list.ID, Name: "one.ogg",
 	})
 	var ticket protocol.BotTrackUploadTicket
 	alice.decode(alice.expect(protocol.TypeBotTrackUploadInfo), &ticket)
@@ -210,7 +210,7 @@ func TestPlaylistTicketIsSingleUse(t *testing.T) {
 
 func TestPlaylistsNeedManageBots(t *testing.T) {
 	f := newFixture(t)
-	bot := f.addBot(t, "DJ", musicFolder(t, "one.mp3"))
+	bot := f.addBot(t, "DJ", musicFolder(t, "one.ogg"))
 	f.defaultRolePermissionsWith(t, "control_bots")
 	bob, _ := f.hello(t, uuidB, "Bob", "")
 
@@ -223,7 +223,7 @@ func TestPlaylistsNeedManageBots(t *testing.T) {
 	bob.expectError(protocol.ErrForbidden)
 
 	bob.send(protocol.TypeBotTrackUpload, "p3", protocol.BotTrackUploadRequest{
-		BotID: bot.ID, PlaylistID: "whatever", Name: "one.mp3",
+		BotID: bot.ID, PlaylistID: "whatever", Name: "one.ogg",
 	})
 	bob.expectError(protocol.ErrForbidden)
 
@@ -243,7 +243,7 @@ func TestPlaylistOfAnotherBotIsNotReachable(t *testing.T) {
 	// The playlist id is real, but it belongs to the other bot: an id must never
 	// become a way to write into another bot's folder.
 	alice.send(protocol.TypeBotTrackUpload, "t1", protocol.BotTrackUploadRequest{
-		BotID: two.ID, PlaylistID: list.ID, Name: "one.mp3",
+		BotID: two.ID, PlaylistID: list.ID, Name: "one.ogg",
 	})
 	alice.expectError(protocol.ErrPlaylistNotFound)
 
@@ -259,7 +259,7 @@ func TestDeletingABotTakesItsPlaylists(t *testing.T) {
 
 	bot := alice.createBotOverSocket("DJ")
 	list := alice.createPlaylist(bot.ID, "Party")
-	f.uploadTrack(t, alice, bot.ID, list.ID, "one.mp3", []byte("fake audio"))
+	f.uploadTrack(t, alice, bot.ID, list.ID, "one.ogg", []byte("fake audio"))
 
 	stored, err := f.store.GetBot(context.Background(), bot.ID)
 	if err != nil {
