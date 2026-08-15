@@ -183,10 +183,12 @@ func (m *Manager) Delete(ctx context.Context, botID string) error {
 	m.dropTokenLocked(b)
 	m.mu.Unlock()
 
-	if err := m.store.DeleteBot(ctx, botID); err != nil {
-		if errors.Is(err, storage.ErrBotNotFound) {
-			return ErrNotFound
-		}
+	// A row that has already gone is not a failure: the caller asked for this
+	// bot to stop existing, and it does not. Refusing here used to leave a bot
+	// that had been deleted from the panel without a reload stuck in memory and
+	// impossible to remove from a client — the delete failed on the missing row
+	// before it ever reached the map.
+	if err := m.store.DeleteBot(ctx, botID); err != nil && !errors.Is(err, storage.ErrBotNotFound) {
 		return err
 	}
 	if err := m.store.DeletePlaylistsOfBot(ctx, botID); err != nil {
@@ -226,11 +228,26 @@ func (m *Manager) libraryFolder(botID string) string {
 // playlists, and nothing of anybody else's. It is also the test for whether a
 // folder is ours to delete.
 func (m *Manager) managedFolder(botID string) string {
+	return filepath.Join(m.storageRoot(), botID)
+}
+
+// storageRoot is where every bot's music lives.
+//
+// A relative setting — "bots", the default — is resolved **next to the
+// database**, not against the working directory. A server is started by systemd
+// or a container from whatever directory they please, and music that is
+// permanent must not land somewhere that depends on that: in the dev container
+// it ended up in /data/data/bots, and one `WorkingDirectory=` away it would
+// have been outside the data volume altogether.
+func (m *Manager) storageRoot() string {
 	root := strings.TrimSpace(m.cfg.String(config.KeyBotsDir))
 	if root == "" {
-		root = "data/bots"
+		root = "bots"
 	}
-	return filepath.Join(root, botID)
+	if filepath.IsAbs(root) || m.store == nil {
+		return root
+	}
+	return filepath.Join(filepath.Dir(m.store.Path()), root)
 }
 
 // normalizeColor keeps a colour short enough to be a colour. It is not parsed:

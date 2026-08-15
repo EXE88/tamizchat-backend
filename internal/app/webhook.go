@@ -27,10 +27,10 @@ func (w webhookRouter) HandleWebhook(ctx context.Context, authHeader string, bod
 
 	switch event.Event {
 	case media.EventIngressEnded:
-		slog.Debug("livekit ingress ended", "ingress", event.Ingress.IngressID)
-		w.bots.TrackEnded(ctx, event.Ingress.IngressID)
+		slog.Debug("livekit ingress ended", "ingress", event.Ingress.IngressID())
+		w.bots.TrackEnded(ctx, event.Ingress.IngressID())
 	case media.EventIngressStarted:
-		slog.Debug("livekit ingress started", "ingress", event.Ingress.IngressID)
+		slog.Debug("livekit ingress started", "ingress", event.Ingress.IngressID())
 	default:
 		slog.Debug("ignoring livekit webhook", "event", event.Event)
 	}

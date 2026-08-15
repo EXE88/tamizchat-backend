@@ -440,11 +440,16 @@ func (m *Manager) playlistDir(botID, playlistID string) string {
 	return filepath.Join(m.managedFolder(botID), playlistID)
 }
 
-// PlaylistFolder is the same path worked out from the bots.dir setting alone,
-// for the CLI panel — which reads the database directly and has no manager.
-func PlaylistFolder(root, botID, playlistID string) string {
+// PlaylistFolder is the same path worked out from the bots.dir setting and the
+// database location, for the CLI panel — which reads the database directly and
+// has no manager. dbPath is what resolves a relative setting, exactly as
+// storageRoot does.
+func PlaylistFolder(root, dbPath, botID, playlistID string) string {
 	if strings.TrimSpace(root) == "" {
-		root = "data/bots"
+		root = "bots"
+	}
+	if !filepath.IsAbs(root) {
+		root = filepath.Join(filepath.Dir(dbPath), root)
 	}
 	return filepath.Join(root, botID, playlistID)
 }

@@ -67,7 +67,21 @@ type bot struct {
 	// token authorizes Ingress to fetch the current track.
 	token   string
 	expires time.Time
+	// startedAt is when the current track began, and shortRuns counts how many
+	// tracks in a row have ended almost immediately. A broken audio path — a
+	// file LiveKit cannot decode, an Ingress that cannot reach the media port —
+	// otherwise turns "advance at the end of a track" into a loop that walks the
+	// whole queue several times a second, forever.
+	startedAt time.Time
+	shortRuns int
 }
+
+// shortRun is how long a track has to last to count as having really played,
+// and howManyShortRuns is how many failures in a row stop the bot.
+const (
+	shortRun         = 3 * time.Second
+	howManyShortRuns = 3
+)
 
 // Manager owns every bot on the server.
 type Manager struct {
@@ -302,6 +316,7 @@ func (m *Manager) play(ctx context.Context, actorUUID, botID string, step int, m
 	m.mu.Lock()
 	b.ingressID = ingressID
 	b.state = protocol.BotPlaying
+	b.startedAt = time.Now()
 	view := m.viewLocked(b)
 	m.mu.Unlock()
 
@@ -370,6 +385,31 @@ func (m *Manager) TrackEnded(ctx context.Context, ingressID string) {
 
 	botID := target.def.ID
 	target.ingressID = ""
+
+	// A track that ended almost as soon as it started did not play: LiveKit
+	// could not decode it, or could not reach the media port. Advancing is the
+	// right answer once — the next file may be fine — but doing it forever is
+	// how one broken bot ends up making hundreds of ingresses a minute.
+	if time.Since(target.startedAt) < shortRun {
+		target.shortRuns++
+	} else {
+		target.shortRuns = 0
+	}
+
+	if target.shortRuns >= howManyShortRuns {
+		target.shortRuns = 0
+		m.mu.Unlock()
+
+		slog.Warn("bot stopped: its tracks keep ending immediately — check that "+
+			"the audio really plays and that Ingress can reach this server",
+			"bot", botID)
+
+		if _, err := m.stop(ctx, "", botID); err != nil {
+			slog.Debug("stopping a bot that cannot play", "bot", botID, "err", err)
+		}
+		return
+	}
+
 	atEnd := !target.def.LoopQueue && !target.def.Shuffle && target.index >= len(target.tracks)-1
 	m.mu.Unlock()
 
@@ -405,8 +445,12 @@ func (m *Manager) ResolveTrack(botID, token string) (path, filename string, err 
 		return "", "", ErrEmptyQueue
 	}
 
+	// The check is against whatever the bot plays from *now* — its library, or
+	// the playlist it is on. Checking def.Folder alone meant every track in a
+	// playlist was refused, so Ingress fetched a 404 and the bot published
+	// silence while claiming to play.
 	track := b.tracks[b.index]
-	if !withinRoot(b.def.Folder, track.Path) {
+	if !withinRoot(m.sourceDirLocked(b), track.Path) {
 		return "", "", ErrNotFound
 	}
 	return track.Path, track.Title, nil

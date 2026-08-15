@@ -244,10 +244,12 @@ var registry = buildRegistry(
 	},
 
 	Setting{
-		Key: KeyBotsDir, Section: "bots", Kind: KindString, Default: "data/bots",
+		Key: KeyBotsDir, Section: "bots", Kind: KindString, Default: "bots",
 		Title: "Bot music folder",
 		Help: "Parent folder for bots created from a client; each gets a folder of " +
-			"its own inside it. A bot created from this panel keeps its own path.",
+			"its own inside it. A relative path is taken from the database's own " +
+			"folder, so the music stays with the data. A bot created from this " +
+			"panel keeps its own path.",
 		Validate: notEmpty,
 	},
 	Setting{

@@ -654,7 +654,8 @@ A bot has named playlists, and plays from one of them or from its own library.
   list, and carrying the index across it would resume at an unrelated track.
 - Deleting the active playlist puts the bot back on its library and stops it.
 - Layout on disk, for the record: `<bots.dir>/<bot id>/default` is the library
-  and `<bots.dir>/<bot id>/<playlist id>` is a playlist. The library is a folder
+  and `<bots.dir>/<bot id>/<playlist id>` is a playlist. A relative `bots.dir`
+  is resolved next to the database. The library is a folder
   *beside* the playlists, not above them: a scan walks subfolders, so a nested
   playlist would be played twice.
 
@@ -688,6 +689,20 @@ ceiling for one track.
 - **There is no server-side volume control.** Each listener sets a participant's
   volume in their own client (LiveKit supports this) — which is better anyway:
   everyone adjusts the bot for themselves, not for the whole room.
+
+### If a bot will not play
+
+The three things that stop it, in the order they bite:
+
+1. **LiveKit's Ingress service must be running** and sharing a redis with
+   LiveKit. Without it CreateIngress fails and `bot.control play` answers
+   `internal_error`.
+2. **`network.public_host` must be an address Ingress can reach.** It fetches
+   the track from this server, so "localhost" is wrong whenever Ingress runs
+   somewhere else — in a container next door, that is `host.docker.internal`.
+3. **The file must be decodable.** A bot whose tracks keep ending within three
+   seconds stops itself and logs why, rather than looping through the queue
+   forever.
 
 ### Setup
 

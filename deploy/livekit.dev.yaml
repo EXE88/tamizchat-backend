@@ -35,5 +35,21 @@ rtc:
 # Dev credentials. The secret has to be at least 32 characters or LiveKit
 # refuses to start. These same two values go into the TamizChat panel under
 # "Voice and video (LiveKit)".
+# How a music bot learns its track finished: LiveKit posts here and the queue
+# advances. Without it a bot plays one song and then sits there, apparently
+# still playing, until somebody presses something.
+#
+# host.docker.internal is the backend as seen from inside this container; the
+# same address has to be in `network.public_host`.
+webhook:
+  api_key: APIdevtamizchat
+  urls:
+    - http://host.docker.internal:8080/api/v1/livekit/webhook
+
+redis:
+  address: redis:6379
+
+# Ingress registers itself here, and LiveKit finds it the same way. Both sides
+# must point at the same redis or a music bot's CreateIngress call goes nowhere.
 keys:
   APIdevtamizchat: devsecret-tamizchat-local-only-do-not-ship-0123456789

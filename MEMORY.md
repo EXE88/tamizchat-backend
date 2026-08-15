@@ -54,7 +54,7 @@ played on ban, microphone and listening settings, key bindings for shortcuts.
 
 ## Current status
 
-**All 11 backend phases are done and tested** (241 tests, all green), plus the
+**All 11 backend phases are done and tested** (242 tests, all green), plus the
 post-roadmap work the client's admin panel needs — see "Work added after phase
 11" below.
 The backend is complete as far as the roadmap goes; the project's next step is
@@ -408,6 +408,36 @@ things the wire did not have. Added since:
     `internal/bots/paths_test.go` pins it. The lesson is worth keeping: a
     default-valued relative path is a case the tests were structurally unable to
     reach.
+
+### The bot audio path had never actually played a note
+
+Everything below was found by running it against a real LiveKit and Ingress for
+the first time. Phase 9's tests used a fake LiveKit, which happily accepted
+calls a real one refuses.
+
+- **The server's own LiveKit token lacked `ingressAdmin`.** `roomAdmin` does not
+  cover the Ingress service, so every CreateIngress answered
+  `401 permissions denied`. Pinned now by `internal/media/grants_test.go`, which
+  decodes the token rather than trusting a fake to check it.
+- **LiveKit's Twirp API answers in snake_case** (`ingress_id`) while its
+  webhooks are camelCase (`ingressId`). Reading only the camelCase spelling made
+  a successfully created ingress look like a failure — and left it running.
+  `IngressInfo` now reads both.
+- **`ResolveTrack` validated the track against `def.Folder`**, the bot's own
+  library, so every track in a playlist was refused: Ingress fetched a 404 and
+  the bot "played" silence. It now checks against whatever the bot plays from.
+- **A bot whose tracks fail instantly used to loop forever.** End-of-track
+  advances the queue, so an undecodable file or an unreachable Ingress produced
+  a new ingress every 1.5 seconds, indefinitely. Three consecutive tracks that
+  end within 3 seconds now stop the bot with an explicit warning.
+- **A relative `bots.dir` is resolved next to the database**, not against the
+  working directory. It had been landing in `/data/data/bots` in the container,
+  and one `WorkingDirectory=` away it would have been outside the data volume —
+  for music that is permanent, unlike room files.
+- **Deleting a bot is idempotent.** A row deleted from the panel without a
+  reload left the bot in memory, and delete refused on the missing row, so it
+  could never be removed from a client. That is what "a hardcoded bot that will
+  not delete" actually was.
 
 ## Final backend status
 

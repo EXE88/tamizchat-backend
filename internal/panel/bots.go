@@ -70,7 +70,7 @@ func (p *Panel) botSource(ctx context.Context, b storage.Bot) (folder, label str
 		return b.Folder, b.Folder
 	}
 
-	folder = bots.PlaylistFolder(p.cfg.String(config.KeyBotsDir), b.ID, b.PlaylistID)
+	folder = bots.PlaylistFolder(p.cfg.String(config.KeyBotsDir), p.store.Path(), b.ID, b.PlaylistID)
 
 	name := b.PlaylistID
 	if list, err := p.store.GetPlaylist(ctx, b.PlaylistID); err == nil {

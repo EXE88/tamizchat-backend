@@ -57,7 +57,7 @@ func TestWebhookIsAcceptedWhenSigned(t *testing.T) {
 	if err != nil {
 		t.Fatalf("verify: %v", err)
 	}
-	if event.Event != EventIngressEnded || event.Ingress.IngressID != "ingress-1" {
+	if event.Event != EventIngressEnded || event.Ingress.IngressID() != "ingress-1" {
 		t.Fatalf("unexpected event: %+v", event)
 	}
 }

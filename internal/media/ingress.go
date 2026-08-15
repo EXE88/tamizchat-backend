@@ -25,13 +25,27 @@ const (
 )
 
 // IngressInfo is the part of LiveKit's reply we care about.
+//
+// The id is read under both spellings on purpose: LiveKit's webhook bodies are
+// camelCase, but its Twirp API answers in snake_case, and reading only one of
+// them meant a successfully created ingress looked like a failure — the bot
+// never started, and the ingress it had just made was left running.
 type IngressInfo struct {
-	IngressID string `json:"ingressId"`
-	Name      string `json:"name"`
-	RoomName  string `json:"roomName"`
-	State     struct {
+	IngressIDCamel string `json:"ingressId"`
+	IngressIDSnake string `json:"ingress_id"`
+	Name           string `json:"name"`
+	RoomName       string `json:"roomName"`
+	State          struct {
 		Status string `json:"status"`
 	} `json:"state"`
+}
+
+// IngressID is whichever spelling arrived.
+func (i IngressInfo) IngressID() string {
+	if i.IngressIDCamel != "" {
+		return i.IngressIDCamel
+	}
+	return i.IngressIDSnake
 }
 
 // CreateIngress asks LiveKit to pull url and publish it into a room as a
@@ -63,10 +77,10 @@ func (m *Manager) CreateIngress(ctx context.Context, roomID, identity, name, url
 		"livekit.Ingress", "CreateIngress", body, &info); err != nil {
 		return "", err
 	}
-	if info.IngressID == "" {
+	if info.IngressID() == "" {
 		return "", errors.New("livekit returned an ingress without an id")
 	}
-	return info.IngressID, nil
+	return info.IngressID(), nil
 }
 
 // DeleteIngress stops a running ingress.
@@ -83,12 +97,12 @@ func (m *Manager) DeleteIngress(ctx context.Context, ingressID string) error {
 // WebhookEvent is the payload LiveKit posts to us. Only the fields TamizChat
 // reacts to are decoded.
 type WebhookEvent struct {
-	Event   string `json:"event"`
-	Ingress struct {
-		IngressID string `json:"ingressId"`
-		RoomName  string `json:"roomName"`
-	} `json:"ingressInfo"`
-	Room struct {
+	Event string `json:"event"`
+	// Both spellings again: the end of a track is learned only from here, and a
+	// field name that did not match would leave every bot stopping silently
+	// after its first song.
+	Ingress IngressInfo `json:"ingressInfo"`
+	Room    struct {
 		Name string `json:"name"`
 	} `json:"room"`
 	ID string `json:"id"`

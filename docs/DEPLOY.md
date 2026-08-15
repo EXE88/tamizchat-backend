@@ -125,7 +125,10 @@ The server's API address is derived from that same `url` (`ws://` → `http://`)
 Bots need LiveKit's **Ingress** service, because TamizChat itself does not
 publish audio.
 
-1. Bring `livekit-ingress` up alongside LiveKit.
+1. Bring `livekit-ingress` up alongside LiveKit, with **a redis both of them
+   share** — that is how LiveKit finds Ingress, and without it every attempt to
+   play answers with an internal error. `deploy/docker-compose.livekit.dev.yml`
+   is a working example.
 2. Point the LiveKit webhook at this address:
    `https://<your host>/api/v1/livekit/webhook`
    Without it, the bot goes quiet after the first track finishes.
@@ -143,7 +146,7 @@ conversion.
 ### Bots created from a client
 
 A bot created from the client has no folder path: it is given storage of its own
-under `bots.dir` (default `data/bots`), and an administrator fills it from the
+under `bots.dir` (default `bots`, taken from the database's own folder), and an administrator fills it from the
 client with **playlists** — named groups of tracks, uploaded over HTTP.
 
 Two things follow, and both matter for an operator:

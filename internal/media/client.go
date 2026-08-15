@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -77,6 +78,11 @@ func (c *client) callInto(ctx context.Context, base, apiKey, apiSecret, service,
 			strings.TrimSpace(string(reply[:min(len(reply), 512)])))
 	}
 	if out != nil {
+		// The reply is logged at debug because LiveKit's field naming is the
+		// thing most likely to be wrong here, and "it answered, but not with
+		// what we expected" is otherwise invisible.
+		slog.Debug("livekit reply", "method", method, "body", string(reply))
+
 		if err := json.Unmarshal(reply, out); err != nil {
 			return fmt.Errorf("livekit %s: decode reply: %w", method, err)
 		}

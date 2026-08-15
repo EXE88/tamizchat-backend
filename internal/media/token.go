@@ -25,14 +25,19 @@ import (
 
 // videoGrant is LiveKit's permission object inside the token.
 type videoGrant struct {
-	Room           string `json:"room,omitempty"`
-	RoomJoin       bool   `json:"roomJoin,omitempty"`
-	RoomAdmin      bool   `json:"roomAdmin,omitempty"`
-	RoomCreate     bool   `json:"roomCreate,omitempty"`
-	RoomList       bool   `json:"roomList,omitempty"`
-	CanPublish     *bool  `json:"canPublish,omitempty"`
-	CanSubscribe   *bool  `json:"canSubscribe,omitempty"`
-	CanPublishData *bool  `json:"canPublishData,omitempty"`
+	Room       string `json:"room,omitempty"`
+	RoomJoin   bool   `json:"roomJoin,omitempty"`
+	RoomAdmin  bool   `json:"roomAdmin,omitempty"`
+	RoomCreate bool   `json:"roomCreate,omitempty"`
+	RoomList   bool   `json:"roomList,omitempty"`
+	// IngressAdmin is required by LiveKit for every call to the Ingress
+	// service. Without it CreateIngress answers 401 "permissions denied" —
+	// which is exactly what a music bot did against a real LiveKit, because
+	// roomAdmin does not cover ingress.
+	IngressAdmin   bool  `json:"ingressAdmin,omitempty"`
+	CanPublish     *bool `json:"canPublish,omitempty"`
+	CanSubscribe   *bool `json:"canSubscribe,omitempty"`
+	CanPublishData *bool `json:"canPublishData,omitempty"`
 	// CanPublishSources narrows publishing to specific sources, which is how
 	// "may talk but may not share their screen" is expressed.
 	CanPublishSources []string `json:"canPublishSources,omitempty"`
@@ -126,7 +131,9 @@ func adminToken(apiKey, apiSecret string) (string, error) {
 		NotBefore: now.Add(-30 * time.Second).Unix(),
 		Expiry:    now.Add(2 * time.Minute).Unix(),
 		JTI:       storage.NewUUID(),
-		Video:     videoGrant{RoomAdmin: true, RoomList: true, RoomCreate: true},
+		Video: videoGrant{
+			RoomAdmin: true, RoomList: true, RoomCreate: true, IngressAdmin: true,
+		},
 	})
 }
 

@@ -179,7 +179,7 @@ func (w webhookVerifier) HandleWebhook(ctx context.Context, authHeader string, b
 		return err
 	}
 	if event.Event == media.EventIngressEnded {
-		w.bots.TrackEnded(ctx, event.Ingress.IngressID)
+		w.bots.TrackEnded(ctx, event.Ingress.IngressID())
 	}
 	return nil
 }
