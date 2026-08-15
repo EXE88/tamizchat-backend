@@ -28,16 +28,19 @@ type Role struct {
 	Permissions uint64
 	Priority    int
 	Color       string
-	IsDefault   bool // held implicitly by everyone
-	CreatedAt   int64
+	// TagStyle is opaque JSON describing how the client draws this role's
+	// tag. The server stores and returns it and never looks inside.
+	TagStyle  string
+	IsDefault bool // held implicitly by everyone
+	CreatedAt int64
 }
 
 // CreateRole inserts a role.
 func (s *Store) CreateRole(ctx context.Context, r Role) error {
 	_, err := s.db.ExecContext(ctx, `
-INSERT INTO roles (id, name, permissions, priority, color, is_default, created_at)
-VALUES (?, ?, ?, ?, ?, ?, unixepoch())`,
-		r.ID, r.Name, int64(r.Permissions), r.Priority, r.Color, boolToInt(r.IsDefault))
+INSERT INTO roles (id, name, permissions, priority, color, tag_style, is_default, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, unixepoch())`,
+		r.ID, r.Name, int64(r.Permissions), r.Priority, r.Color, r.TagStyle, boolToInt(r.IsDefault))
 	if isUniqueViolation(err) {
 		return ErrRoleNameTaken
 	}
@@ -50,9 +53,9 @@ VALUES (?, ?, ?, ?, ?, ?, unixepoch())`,
 // UpdateRole overwrites the editable fields of a role.
 func (s *Store) UpdateRole(ctx context.Context, r Role) error {
 	res, err := s.db.ExecContext(ctx, `
-UPDATE roles SET name = ?, permissions = ?, priority = ?, color = ?, is_default = ?
+UPDATE roles SET name = ?, permissions = ?, priority = ?, color = ?, tag_style = ?, is_default = ?
 WHERE id = ?`,
-		r.Name, int64(r.Permissions), r.Priority, r.Color, boolToInt(r.IsDefault), r.ID)
+		r.Name, int64(r.Permissions), r.Priority, r.Color, r.TagStyle, boolToInt(r.IsDefault), r.ID)
 	if isUniqueViolation(err) {
 		return ErrRoleNameTaken
 	}
@@ -80,7 +83,7 @@ func (s *Store) DeleteRole(ctx context.Context, id string) error {
 // ListRoles returns every role, strongest first.
 func (s *Store) ListRoles(ctx context.Context) ([]Role, error) {
 	rows, err := s.db.QueryContext(ctx, `
-SELECT id, name, permissions, priority, color, is_default, created_at
+SELECT id, name, permissions, priority, color, tag_style, is_default, created_at
 FROM roles ORDER BY priority DESC, created_at`)
 	if err != nil {
 		return nil, fmt.Errorf("list roles: %w", err)
@@ -92,7 +95,7 @@ FROM roles ORDER BY priority DESC, created_at`)
 		var r Role
 		var perms int64
 		var isDefault int
-		if err := rows.Scan(&r.ID, &r.Name, &perms, &r.Priority, &r.Color,
+		if err := rows.Scan(&r.ID, &r.Name, &perms, &r.Priority, &r.Color, &r.TagStyle,
 			&isDefault, &r.CreatedAt); err != nil {
 			return nil, err
 		}
@@ -109,9 +112,9 @@ func (s *Store) GetRole(ctx context.Context, id string) (Role, error) {
 	var perms int64
 	var isDefault int
 	err := s.db.QueryRowContext(ctx, `
-SELECT id, name, permissions, priority, color, is_default, created_at
+SELECT id, name, permissions, priority, color, tag_style, is_default, created_at
 FROM roles WHERE id = ?`, id).
-		Scan(&r.ID, &r.Name, &perms, &r.Priority, &r.Color, &isDefault, &r.CreatedAt)
+		Scan(&r.ID, &r.Name, &perms, &r.Priority, &r.Color, &r.TagStyle, &isDefault, &r.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Role{}, ErrRoleNotFound
 	}

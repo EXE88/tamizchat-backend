@@ -16,6 +16,7 @@ type RoleSpec struct {
 	Permissions *authz.Permission
 	Priority    *int
 	Color       *string
+	TagStyle    *string
 }
 
 // CreateRole defines a new role.
@@ -37,6 +38,9 @@ func (m *Manager) CreateRole(ctx context.Context, spec RoleSpec) (storage.Role, 
 	}
 	if spec.Color != nil {
 		role.Color = *spec.Color
+	}
+	if spec.TagStyle != nil {
+		role.TagStyle = *spec.TagStyle
 	}
 
 	if err := m.store.CreateRole(ctx, role); err != nil {
@@ -78,6 +82,9 @@ func (m *Manager) UpdateRole(ctx context.Context, roleID string, spec RoleSpec) 
 	}
 	if spec.Color != nil {
 		role.Color = *spec.Color
+	}
+	if spec.TagStyle != nil {
+		role.TagStyle = *spec.TagStyle
 	}
 
 	if err := m.store.UpdateRole(ctx, role); err != nil {

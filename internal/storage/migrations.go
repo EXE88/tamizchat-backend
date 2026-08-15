@@ -170,6 +170,30 @@ CREATE TABLE bots (
 
 CREATE UNIQUE INDEX idx_bots_name ON bots (name COLLATE NOCASE);`,
 	},
+	{
+		// How a role is drawn as a tag under somebody's name.
+		//
+		// One JSON column rather than a column per attribute: the set of visual
+		// options is expected to grow, and every addition would otherwise be a
+		// migration and a protocol change. The server never interprets this — it
+		// stores it and hands it back, and the client decides what it means.
+		name: "0009_role_tag_style",
+		stmt: `
+ALTER TABLE roles ADD COLUMN tag_style TEXT NOT NULL DEFAULT '';`,
+	},
+	{
+		// Creating and deleting bots moved out of the panel and onto the wire,
+		// which needs a permission of its own (65536): controlling a bot is an
+		// everyday job, creating one is an administrative one.
+		//
+		// Only the admin role gets it. Unlike the media and paint bits, this is
+		// not something the default role used to be able to do — nobody loses
+		// anything by not receiving it.
+		name: "0010_manage_bots_permission",
+		stmt: `
+UPDATE roles SET permissions = permissions | 65536
+WHERE id = 'role-admin';`,
+	},
 }
 
 func (s *Store) migrate(ctx context.Context) error {

@@ -1,0 +1,3 @@
+# Everything except the prebuilt Linux binary the image copies in.
+*
+!dist/tamizchat-linux-amd64

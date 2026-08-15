@@ -19,6 +19,7 @@ func roleView(r storage.Role) protocol.Role {
 		Permissions: authz.Keys(authz.Permission(r.Permissions)),
 		Priority:    r.Priority,
 		Color:       r.Color,
+		TagStyle:    r.TagStyle,
 		IsDefault:   r.IsDefault,
 	}
 }
@@ -164,7 +165,7 @@ func (g *Gateway) decodeRoleSpec(sess *session.Session, env protocol.Envelope) (
 		return access.RoleSpec{}, false
 	}
 
-	spec := access.RoleSpec{Name: req.Name, Priority: req.Priority, Color: req.Color}
+	spec := access.RoleSpec{Name: req.Name, Priority: req.Priority, Color: req.Color, TagStyle: req.TagStyle}
 	if req.Permissions != nil {
 		mask := authz.Mask(*req.Permissions)
 		spec.Permissions = &mask

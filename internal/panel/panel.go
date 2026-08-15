@@ -332,6 +332,8 @@ func sectionTitle(section string) string {
 		return "Files and images"
 	case "livekit":
 		return "Voice and video (LiveKit)"
+	case "bots":
+		return "Bots"
 	case "log":
 		return "Logging"
 	}

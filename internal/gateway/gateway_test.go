@@ -96,6 +96,11 @@ func newFixture(t *testing.T) *fixture {
 	if err := cfg.Set(ctx, config.KeyUploadsDir, filepath.Join(t.TempDir(), "uploads")); err != nil {
 		t.Fatalf("set upload dir: %v", err)
 	}
+	// Creating a bot makes it a folder; without this it would land in the
+	// package directory instead of somewhere the test cleans up.
+	if err := cfg.Set(ctx, config.KeyBotsDir, filepath.Join(t.TempDir(), "bots")); err != nil {
+		t.Fatalf("set bots dir: %v", err)
+	}
 
 	chatMgr := chat.NewManager(cfg, roomMgr, accessMgr, accessMgr)
 	fileMgr, err := files.New(cfg, roomMgr, sessions, accessMgr)
@@ -191,6 +196,26 @@ func (f *fixture) defaultRolePermissionsWithout(t *testing.T, key string) {
 	}
 
 	perms := authz.Permission(role.Permissions) &^ drop.Perm
+	if _, err := f.access.UpdateRole(context.Background(), storage.RoleIDDefault,
+		access.RoleSpec{Permissions: &perms}); err != nil {
+		t.Fatalf("update default role: %v", err)
+	}
+}
+
+// defaultRolePermissionsWith adds one permission to the role everybody holds.
+func (f *fixture) defaultRolePermissionsWith(t *testing.T, key string) {
+	t.Helper()
+	add, ok := authz.Lookup(key)
+	if !ok {
+		t.Fatalf("unknown permission %q", key)
+	}
+
+	role, err := f.store.GetRole(context.Background(), storage.RoleIDDefault)
+	if err != nil {
+		t.Fatalf("get default role: %v", err)
+	}
+
+	perms := authz.Permission(role.Permissions) | add.Perm
 	if _, err := f.access.UpdateRole(context.Background(), storage.RoleIDDefault,
 		access.RoleSpec{Permissions: &perms}); err != nil {
 		t.Fatalf("update default role: %v", err)

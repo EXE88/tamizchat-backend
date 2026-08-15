@@ -1,0 +1,43 @@
+# The development backend for working on the TamizChat client.
+#
+#   docker compose -f deploy/docker-compose.dev.yml up -d --build
+#
+# The database lives in a named volume, so the server keeps its settings, rooms,
+# roles and known users between restarts. To open the admin panel against that
+# same database:
+#
+#   docker compose -f deploy/docker-compose.dev.yml exec backend tamizchat
+#
+# LiveKit is deliberately not here: it needs host networking for its ICE
+# candidates, which Docker Desktop on Windows does not provide properly. Voice
+# and video are wired up in a later phase against a LiveKit running elsewhere.
+
+name: tamizchat-dev
+
+services:
+  backend:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        VERSION: dev
+        COMMIT: docker
+    image: tamizchat-backend:dev
+    container_name: tamizchat-backend
+    restart: unless-stopped
+    stop_grace_period: 10s
+    ports:
+      - "8080:8080"
+    volumes:
+      - backend-data:/data
+    command: ["run", "-log", "debug"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+volumes:
+  backend-data:
+    name: tamizchat-dev-data

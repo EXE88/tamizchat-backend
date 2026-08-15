@@ -1,0 +1,42 @@
+# LiveKit for working on the client's voice and video, on this machine only.
+#
+#   docker compose -f deploy/docker-compose.livekit.dev.yml up -d
+#   docker compose -f deploy/docker-compose.livekit.dev.yml down
+#
+# It is a separate file from docker-compose.dev.yml on purpose: the backend is
+# needed for every phase, LiveKit only for the media ones, and LiveKit is the
+# part most likely to need restarting while its config is being tuned.
+#
+# Bridge networking with published ports, not host networking. See
+# livekit.dev.yaml for why that works here and would not work on a real server.
+
+name: tamizchat-livekit-dev
+
+services:
+  livekit:
+    image: livekit/livekit-server:latest
+    container_name: tamizchat-livekit-dev
+    restart: unless-stopped
+    command: --config /etc/livekit.yaml
+    # Published on every interface, not pinned to 127.0.0.1, because two
+    # different places have to reach LiveKit and they do not agree on a name:
+    #
+    #   the WinUI client runs on the host       -> 127.0.0.1:7880 works
+    #   the backend runs in its own container   -> 127.0.0.1 is *itself*
+    #
+    # TamizChat has one `livekit.url` setting and derives the server API address
+    # from it, so a single name has to satisfy both. That name is
+    # host.docker.internal, which resolves from inside a container and on the
+    # host — but only reaches a port that is not bound to loopback alone.
+    ports:
+      - "7880:7880/tcp" # signalling, the ws:// the client connects to
+      - "7881:7881/tcp" # ICE over TCP, the no-UDP fallback
+      - "7882:7882/udp" # ICE over UDP, where the media actually goes
+    volumes:
+      - ./livekit.dev.yaml:/etc/livekit.yaml:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:7880"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s

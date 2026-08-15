@@ -54,7 +54,9 @@ played on ban, microphone and listening settings, key bindings for shortcuts.
 
 ## Current status
 
-**All 11 backend phases are done and tested** (224 tests, all green).
+**All 11 backend phases are done and tested** (229 tests, all green), plus the
+post-roadmap work the client's admin panel needs — see "Work added after phase
+11" below.
 The backend is complete as far as the roadmap goes; the project's next step is
 the WinUI 3 frontend. Phase details are in [docs/ROADMAP.md](docs/ROADMAP.md) and
 the wire contract is in [docs/PROTOCOL.md](docs/PROTOCOL.md).
@@ -344,11 +346,38 @@ backend/
 - `WriteTimeout` is **not** set on the http.Server and must not be: sockets stay
   open for a long time and that timeout kills the WebSocket.
 
+### Work added after phase 11, for the client's admin panel
+
+The roadmap was finished, but the WinUI client's in-client admin panel needs
+things the wire did not have. Added since:
+
+- **`tag_style` on a role** (migration 0009): opaque JSON the server stores and
+  echoes without ever looking inside, so new visual options for a role's tag cost
+  no protocol change. `color` is kept in step with it by the client.
+- **Bot lifecycle over the wire** — `bot.create` / `bot.update` / `bot.delete`,
+  plus the `bot.removed` event. Creating a bot no longer means SSH-ing in.
+  - A new permission, **`manage_bots`** (bit 65536, migration 0010), separate
+    from `control_bots`: driving the music is an everyday job, configuring the
+    server's bots is an administrative one. Only `role-admin` is granted it.
+  - **No folder field on the wire, deliberately.** That path is opened by the
+    server, so letting a client name one would turn bot creation into an
+    arbitrary directory read through the stream endpoint. A client-created bot
+    gets `<bots.dir>/<bot id>` and its music arrives by upload; a panel-created
+    bot keeps the operator's own path.
+  - Delete removes the folder **only when it is the one we made** (compared
+    against `managedFolder`). An operator's own folder is never touched.
+  - Disabling a bot stops it. A switch that says "off" while the room still hears
+    music is a bug, so `Update` routes through `stop` when `enabled` goes false.
+  - `bots.dir` is a new setting in a new `bots` config section.
+
 ## Final backend status
 
-The roadmap is finished. Work that was deliberately deferred is listed at the end
-of `docs/ROADMAP.md` (reply, server-side stickers, real bot pause, more webhooks,
-race in CI).
+Work that was deliberately deferred is listed at the end of `docs/ROADMAP.md`
+(reply, server-side stickers, real bot pause, more webhooks, race in CI).
+Bot **playlists** — named playlists per bot with client-side upload — are the
+next backend piece the client needs, and should reuse the phase-6 "permission
+over the socket, bytes over HTTP" ticket pattern rather than invent a second
+upload path.
 
 ## Next step
 

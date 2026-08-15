@@ -70,6 +70,9 @@ const (
 	TypeBotList    = "bot.list"
 	TypeBotControl = "bot.control"
 	TypeBotMove    = "bot.move"
+	TypeBotCreate  = "bot.create"
+	TypeBotUpdate  = "bot.update"
+	TypeBotDelete  = "bot.delete"
 )
 
 // Frame types sent by the server.
@@ -124,6 +127,10 @@ const (
 
 	TypeBots     = "bot.list"
 	TypeBotState = "bot.state"
+	// TypeBotGone says a bot no longer exists. bot.state covers a bot appearing
+	// as well as changing, so a client that meets an id it does not know should
+	// add it rather than ignore the frame.
+	TypeBotGone = "bot.removed"
 
 	TypeServerNotice = "server.notice"
 )
@@ -183,6 +190,8 @@ const (
 	ErrBotDisabled = "bot_disabled"
 	ErrBotEmpty    = "bot_queue_empty"
 	ErrBotAction   = "bot_bad_action"
+	ErrBotNameUsed = "bot_name_taken"
+	ErrBotTooMany  = "bot_limit_reached"
 )
 
 // Reasons a session ends, reported in user.left and in the close frame.
@@ -313,7 +322,11 @@ type Role struct {
 	Permissions []string `json:"permissions"`
 	Priority    int      `json:"priority"`
 	Color       string   `json:"color,omitempty"`
-	IsDefault   bool     `json:"is_default"`
+	// TagStyle is opaque JSON the client uses to draw this role's tag. The
+	// server stores and echoes it without interpreting it, so new visual
+	// options need no protocol change.
+	TagStyle  string `json:"tag_style,omitempty"`
+	IsDefault bool   `json:"is_default"`
 }
 
 // RoleSpec is the create/update payload. Absent fields are left unchanged.
@@ -323,6 +336,7 @@ type RoleSpec struct {
 	Permissions *[]string `json:"permissions,omitempty"`
 	Priority    *int      `json:"priority,omitempty"`
 	Color       *string   `json:"color,omitempty"`
+	TagStyle    *string   `json:"tag_style,omitempty"`
 }
 
 // RoleRef names a role in delete requests.
@@ -498,6 +512,28 @@ type BotControl struct {
 type BotMove struct {
 	BotID  string `json:"bot_id"`
 	RoomID string `json:"room_id"`
+}
+
+// BotSpec creates or edits a bot. Every field is optional on an update, where
+// nil means "leave this alone"; a create needs at least a name.
+//
+// There is deliberately no folder here. The path a bot plays from is a path on
+// the server's disk, and a remote client has no business naming one — a bot
+// created from a client is given a folder of its own under "bots.dir", and the
+// music goes into it by upload. A bot created from the CLI panel keeps pointing
+// wherever the operator pointed it.
+type BotSpec struct {
+	BotID   string  `json:"bot_id,omitempty"` // ignored on create
+	Name    *string `json:"name,omitempty"`
+	Color   *string `json:"color,omitempty"`
+	Loop    *bool   `json:"loop,omitempty"`
+	Shuffle *bool   `json:"shuffle,omitempty"`
+	Enabled *bool   `json:"enabled,omitempty"`
+}
+
+// BotRef names a bot in delete requests and in the bot.removed event.
+type BotRef struct {
+	BotID string `json:"bot_id"`
 }
 
 // BotQueue is the full track list, for the panel a client shows on a bot.

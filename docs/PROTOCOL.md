@@ -106,6 +106,9 @@ the client can build its interface immediately without an extra request.
 | `bot.list` | — | The bots and their current state (open to everyone) |
 | `bot.control` | `{"bot_id", "action", "track_index"?}` | Requires the `control_bots` permission |
 | `bot.move` | `{"bot_id", "room_id"}` | An empty `room_id` means "out of the room" |
+| `bot.create` | BotSpec | Requires the `manage_bots` permission |
+| `bot.update` | BotSpec with `bot_id` | Requires the `manage_bots` permission |
+| `bot.delete` | `{"bot_id"}` | Requires the `manage_bots` permission |
 
 `capacity: 0` on creation means "use the server default".
 
@@ -150,7 +153,8 @@ the client can build its interface immediately without an extra request.
 | `paint.clear` | `{"room_id", "scope", "by"}` |
 | `paint.state` | `{"room_id", "strokes": [Stroke], "max_strokes"}` |
 | `bot.list` | `{"bots": [Bot]}` |
-| `bot.state` | A Bot — every time the bot's state changes |
+| `bot.state` | A Bot — every time the bot's state changes, including a new one |
+| `bot.removed` | `{"bot_id"}` — that bot no longer exists |
 | `server.notice` | `{"text", "from"}` — a notice from the server operator |
 
 The `Room` shape:
@@ -254,6 +258,8 @@ The codes are stable identifiers; a client should show its own text based on
 | `bot_disabled` | That bot is disabled |
 | `bot_queue_empty` | The bot's music folder is empty |
 | `bot_bad_action` | The bot command is not recognised |
+| `bot_name_taken` | Another bot already uses that name |
+| `bot_limit_reached` | The server already has as many bots as it allows |
 | `message_invalid` | The text or sticker is not acceptable (`message` is displayable) |
 | `message_not_found` | The message is no longer in the room's memory |
 | `stickers_disabled` | Stickers are off on this server |
@@ -309,7 +315,8 @@ still understand the ones it knows:
 
 `send_messages` · `upload_files` · `moderate_chat` · `manage_rooms` ·
 `join_locked_rooms` · `bypass_room_password` · `kick` · `ban` · `mute` ·
-`move_users` · `manage_roles` · `control_bots`
+`move_users` · `manage_roles` · `control_bots` · `manage_bots` · `speak` ·
+`publish_video` · `share_screen` · `paint`
 
 `welcome` also carries the server's full role list (`roles`) and your own
 permissions (`permissions`) so the client can hide buttons that are of no use to
@@ -584,6 +591,35 @@ Commands (`bot.control` → `action`): `play` · `stop` · `next` · `prev` ·
 
 Any change to a bot's state broadcasts a `bot.state` to everyone — just like user
 presence, because the client shows bots next to people in the same tree.
+
+### Creating and deleting bots
+
+`bot.create`, `bot.update` and `bot.delete` need the `manage_bots` permission,
+which is separate from `control_bots` on purpose: driving the music is an
+everyday job, configuring the server's bots is an administrative one.
+
+The `BotSpec` shape — on an update every field is optional and an absent one is
+left alone; a create needs at least a name:
+
+```json
+{ "bot_id": "…", "name": "DJ", "color": "#ff8800",
+  "loop": true, "shuffle": false, "enabled": true }
+```
+
+**There is no folder field, and there will not be one.** The folder is a path on
+the server's disk; a client naming one would turn bot creation into a way of
+reading any directory on the host through the stream endpoint. A bot created
+this way is given a folder of its own under the `bots.dir` setting, and its music
+arrives by upload. A bot created from the CLI panel keeps pointing wherever the
+operator pointed it.
+
+Deleting a bot removes the folder the server made for it, and never touches a
+folder an operator typed in themselves.
+
+A create broadcasts an ordinary `bot.state`, so a client meeting an id it does
+not know should add it rather than ignore the frame. A delete broadcasts
+`bot.removed`. In both cases the actor is left out of the broadcast and matches
+their own reply by `id`.
 
 ### What is deliberately missing
 

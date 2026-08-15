@@ -24,6 +24,7 @@ func TestPermissionBitsAreStable(t *testing.T) {
 		"publish_video":        8192,
 		"share_screen":         16384,
 		"paint":                32768,
+		"manage_bots":          65536,
 	}
 
 	for key, bit := range want {

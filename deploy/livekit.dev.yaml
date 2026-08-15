@@ -1,0 +1,39 @@
+# LiveKit config for LOCAL DEVELOPMENT ONLY, on Docker Desktop for Windows.
+#
+# The production config (livekit.yaml) runs LiveKit with host networking,
+# because LiveKit has to announce a reachable address in ICE. Docker Desktop on
+# Windows has no real host networking, so that file cannot be used here.
+#
+# This one works around it by giving up on reaching LiveKit from anywhere except
+# this machine: ICE announces 127.0.0.1 and exactly one UDP port is published.
+# Every client is the loopback interface, so no address translation is involved.
+#
+# Do not copy these keys, or this file, to a real server.
+
+port: 7880
+
+# Media will not connect? Set this to debug and read the ICE candidates.
+log_level: info
+
+rtc:
+  # A single UDP port, so it can be published by Docker. A port *range* would
+  # have to be published one port at a time and Docker Desktop is very slow
+  # about that.
+  udp_port: 7882
+
+  # The fallback for when UDP is blocked. Worth keeping in dev too: it is the
+  # path some users will really take, so it should be exercised sometimes.
+  tcp_port: 7881
+
+  # The whole point of this file. Left at true, LiveKit discovers the
+  # container's bridge address (172.x) and hands it to the client as the place
+  # to send media. Nothing on the host can route there, so the peer connection
+  # negotiates and then goes silent — signalling works, audio never arrives.
+  use_external_ip: false
+  node_ip: 127.0.0.1
+
+# Dev credentials. The secret has to be at least 32 characters or LiveKit
+# refuses to start. These same two values go into the TamizChat panel under
+# "Voice and video (LiveKit)".
+keys:
+  APIdevtamizchat: devsecret-tamizchat-local-only-do-not-ship-0123456789

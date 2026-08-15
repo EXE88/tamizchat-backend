@@ -28,6 +28,7 @@ const (
 	PermPublishVideo
 	PermShareScreen
 	PermPaint
+	PermManageBots
 )
 
 // Descriptor documents one permission for the admin panel and the client.
@@ -55,6 +56,7 @@ var All = []Descriptor{
 	{PermPaint, "paint", "Draw on the paint board"},
 	{PermManageRoles, "manage_roles", "Manage roles and their assignment"},
 	{PermControlBots, "control_bots", "Control bots"},
+	{PermManageBots, "manage_bots", "Create, edit and delete bots"},
 }
 
 // Lookup finds a permission by its wire key.

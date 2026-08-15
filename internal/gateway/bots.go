@@ -68,6 +68,84 @@ func (g *Gateway) handleBotMove(ctx context.Context, sess *session.Session, env 
 	_ = sess.SendMessage(protocol.TypeBotState, env.ID, view)
 }
 
+// handleBotCreate defines a new bot. This is a heavier job than driving one, so
+// it takes manage_bots rather than control_bots: an operator can hand out the
+// music controls without handing over the server's bot configuration.
+func (g *Gateway) handleBotCreate(ctx context.Context, sess *session.Session, env protocol.Envelope) {
+	if !g.require(sess, env.ID, authz.PermManageBots) {
+		return
+	}
+
+	var req protocol.BotSpec
+	if err := json.Unmarshal(env.Data, &req); err != nil {
+		sess.SendError(env.ID, protocol.ErrBadRequest, "the message payload is not valid")
+		return
+	}
+
+	view, err := g.bots.Create(ctx, sess.ClientUUID, req)
+	if err != nil {
+		g.replyBotError(sess, env.ID, err)
+		return
+	}
+
+	g.access.Log(ctx, storage.ModEntry{
+		ActorUUID: sess.ClientUUID, ActorName: sess.Username(),
+		Action: "bot_create", TargetName: view.Name,
+	})
+	_ = sess.SendMessage(protocol.TypeBotState, env.ID, view)
+}
+
+func (g *Gateway) handleBotUpdate(ctx context.Context, sess *session.Session, env protocol.Envelope) {
+	if !g.require(sess, env.ID, authz.PermManageBots) {
+		return
+	}
+
+	var req protocol.BotSpec
+	if err := json.Unmarshal(env.Data, &req); err != nil {
+		sess.SendError(env.ID, protocol.ErrBadRequest, "the message payload is not valid")
+		return
+	}
+
+	view, err := g.bots.Update(ctx, sess.ClientUUID, req)
+	if err != nil {
+		g.replyBotError(sess, env.ID, err)
+		return
+	}
+
+	g.access.Log(ctx, storage.ModEntry{
+		ActorUUID: sess.ClientUUID, ActorName: sess.Username(),
+		Action: "bot_update", TargetName: view.Name,
+	})
+	_ = sess.SendMessage(protocol.TypeBotState, env.ID, view)
+}
+
+func (g *Gateway) handleBotDelete(ctx context.Context, sess *session.Session, env protocol.Envelope) {
+	if !g.require(sess, env.ID, authz.PermManageBots) {
+		return
+	}
+
+	var req protocol.BotRef
+	if err := json.Unmarshal(env.Data, &req); err != nil {
+		sess.SendError(env.ID, protocol.ErrBadRequest, "the message payload is not valid")
+		return
+	}
+
+	if err := g.bots.Delete(ctx, req.BotID); err != nil {
+		g.replyBotError(sess, env.ID, err)
+		return
+	}
+
+	g.access.Log(ctx, storage.ModEntry{
+		ActorUUID: sess.ClientUUID, ActorName: sess.Username(),
+		Action: "bot_delete", TargetName: req.BotID,
+	})
+
+	// The actor is excluded from the broadcast and correlates their own reply by
+	// id — the same pattern every other administrative action here uses.
+	g.sessions.Broadcast(protocol.TypeBotGone, req, sess.ClientUUID)
+	_ = sess.SendMessage(protocol.TypeBotGone, env.ID, req)
+}
+
 func trackTitle(view protocol.Bot) string {
 	if view.Track == nil {
 		return ""
@@ -85,6 +163,10 @@ func (g *Gateway) replyBotError(sess *session.Session, id string, err error) {
 		sess.SendError(id, protocol.ErrBotEmpty, "that bot's music folder is empty")
 	case errors.Is(err, bots.ErrBadAction):
 		sess.SendError(id, protocol.ErrBotAction, "that command is not recognised for a bot")
+	case errors.Is(err, bots.ErrNameTaken):
+		sess.SendError(id, protocol.ErrBotNameUsed, "another bot already uses that name")
+	case errors.Is(err, bots.ErrTooManyBots):
+		sess.SendError(id, protocol.ErrBotTooMany, "this server already has as many bots as it allows")
 	case errors.Is(err, bots.ErrNoRoom):
 		sess.SendError(id, protocol.ErrRoomNotFound, "move the bot into a room first")
 	case errors.Is(err, bots.ErrNoMedia):

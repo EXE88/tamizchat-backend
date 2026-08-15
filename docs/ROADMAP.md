@@ -225,8 +225,20 @@ the panel would duplicate what the OS does better.
 
 ## After phase 11
 
-The backend is complete. Work that was deliberately deferred and can be picked
-up whenever it is needed:
+The roadmap is complete. Since then, driven by the client's in-client admin
+panel:
+
+- **Role tag styling** — a `tag_style` JSON blob on a role (migration 0009),
+  stored and echoed without interpretation.
+- **Bot lifecycle over the wire** — `bot.create` / `bot.update` / `bot.delete`
+  and the `bot.removed` event, behind a new `manage_bots` permission (migration
+  0010). No folder travels on the wire; a client-created bot gets its own folder
+  under the new `bots.dir` setting. See PROTOCOL.md.
+
+Still open, and next: **bot playlists** — named playlists per bot with upload
+from the client, reusing the phase-6 ticket pattern.
+
+Work that was deliberately deferred and can be picked up whenever it is needed:
 
 - Replying to a message, and room system messages
 - A server-hosted sticker pack (needs permanent storage separate from the

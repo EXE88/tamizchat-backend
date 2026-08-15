@@ -36,7 +36,7 @@ type Setting struct {
 
 // Sections in the order the admin panel should show them.
 var Sections = []string{"server", "network", "tls", "users", "rooms", "chat",
-	"uploads", "paint", "livekit", "backup", "log"}
+	"uploads", "paint", "livekit", "bots", "backup", "log"}
 
 var registry = buildRegistry(
 	Setting{
@@ -244,6 +244,14 @@ var registry = buildRegistry(
 	},
 
 	Setting{
+		Key: KeyBotsDir, Section: "bots", Kind: KindString, Default: "data/bots",
+		Title: "Bot music folder",
+		Help: "Parent folder for bots created from a client; each gets a folder of " +
+			"its own inside it. A bot created from this panel keeps its own path.",
+		Validate: notEmpty,
+	},
+
+	Setting{
 		Key: KeyLogLevel, Section: "log", Kind: KindEnum, Default: "info",
 		Options: []string{"debug", "info", "warn", "error"},
 		Title:   "Log level", Help: "Applied without a restart.",
@@ -303,6 +311,8 @@ const (
 	KeyLiveKitURL       = "livekit.url"
 	KeyLiveKitAPIKey    = "livekit.api_key"
 	KeyLiveKitAPISecret = "livekit.api_secret"
+
+	KeyBotsDir = "bots.dir"
 
 	KeyLogLevel = "log.level"
 )

@@ -482,3 +482,158 @@ func (f *fixture) expectStreamRefused(t *testing.T, botID string) {
 		t.Fatalf("an untokenized fetch should get nothing, got %d", resp.StatusCode)
 	}
 }
+
+// ptr is the shorthand the optional fields of a BotSpec need.
+func ptr[T any](v T) *T { return &v }
+
+func TestBotCreateUpdateDeleteOverTheSocket(t *testing.T) {
+	f := newFixture(t)
+	alice, _ := f.hello(t, uuidA, "Alice", "")
+
+	alice.send(protocol.TypeBotCreate, "c1", protocol.BotSpec{
+		Name: ptr("DJ"), Color: ptr("#ff8800"), Shuffle: ptr(true),
+	})
+	var created protocol.Bot
+	alice.decode(alice.expect(protocol.TypeBotState), &created)
+
+	if created.Name != "DJ" || created.Color != "#ff8800" || !created.Shuffle {
+		t.Fatalf("created bot came back wrong: %+v", created)
+	}
+	if created.State != protocol.BotIdle || created.TrackCount != 0 {
+		t.Fatalf("a new bot should be idle with nothing to play: %+v", created)
+	}
+	// It has a folder of its own, and the client never learns where.
+	stored, err := f.store.GetBot(context.Background(), created.ID)
+	if err != nil {
+		t.Fatalf("get bot: %v", err)
+	}
+	if !strings.HasSuffix(filepath.ToSlash(stored.Folder), "bots/"+created.ID) {
+		t.Fatalf("bot folder = %q, want one derived from the id", stored.Folder)
+	}
+	if _, err := os.Stat(stored.Folder); err != nil {
+		t.Fatalf("the bot's folder should exist: %v", err)
+	}
+
+	alice.send(protocol.TypeBotUpdate, "u1", protocol.BotSpec{
+		BotID: created.ID, Name: ptr("Night DJ"), Shuffle: ptr(false),
+	})
+	var updated protocol.Bot
+	alice.decode(alice.expect(protocol.TypeBotState), &updated)
+	if updated.Name != "Night DJ" || updated.Shuffle {
+		t.Fatalf("update did not apply: %+v", updated)
+	}
+	if updated.Color != "#ff8800" {
+		t.Fatalf("a field left out of the spec must be left alone, got %+v", updated)
+	}
+
+	alice.send(protocol.TypeBotDelete, "d1", protocol.BotRef{BotID: created.ID})
+	var gone protocol.BotRef
+	alice.decode(alice.expect(protocol.TypeBotGone), &gone)
+	if gone.BotID != created.ID {
+		t.Fatalf("bot.removed named %q, want %q", gone.BotID, created.ID)
+	}
+
+	alice.send(protocol.TypeBotList, "l1", nil)
+	var list protocol.BotList
+	alice.decode(alice.expect(protocol.TypeBots), &list)
+	if len(list.Bots) != 0 {
+		t.Fatalf("the deleted bot is still listed: %+v", list.Bots)
+	}
+	// The folder it was given goes with it.
+	if _, err := os.Stat(stored.Folder); !os.IsNotExist(err) {
+		t.Fatalf("the bot's own folder should be gone, stat gave %v", err)
+	}
+}
+
+func TestBotLifecycleReachesEveryone(t *testing.T) {
+	f := newFixture(t)
+	alice, _ := f.hello(t, uuidA, "Alice", "")
+	bob, _ := f.hello(t, uuidB, "Bob", "")
+	alice.expect(protocol.TypeUserJoined)
+
+	alice.send(protocol.TypeBotCreate, "c1", protocol.BotSpec{Name: ptr("DJ")})
+	var created protocol.Bot
+	alice.decode(alice.expect(protocol.TypeBotState), &created)
+
+	// Bob was not the actor, so he learns about the new bot from the broadcast.
+	var seen protocol.Bot
+	bob.decode(bob.expect(protocol.TypeBotState), &seen)
+	if seen.ID != created.ID || seen.Name != "DJ" {
+		t.Fatalf("bob saw %+v, want the new bot", seen)
+	}
+
+	alice.send(protocol.TypeBotDelete, "d1", protocol.BotRef{BotID: created.ID})
+	alice.expect(protocol.TypeBotGone)
+
+	var gone protocol.BotRef
+	bob.decode(bob.expect(protocol.TypeBotGone), &gone)
+	if gone.BotID != created.ID {
+		t.Fatalf("bob was told %q was removed, want %q", gone.BotID, created.ID)
+	}
+}
+
+func TestBotLifecycleNeedsManageBots(t *testing.T) {
+	f := newFixture(t)
+	bot := f.addBot(t, "DJ", musicFolder(t, "one.mp3"))
+
+	// Bob holds only the default role. Controlling bots and managing them are
+	// separate permissions, so granting him control must not let him delete one.
+	f.defaultRolePermissionsWith(t, "control_bots")
+	bob, _ := f.hello(t, uuidB, "Bob", "")
+
+	bob.send(protocol.TypeBotCreate, "c1", protocol.BotSpec{Name: ptr("Mine")})
+	bob.expectError(protocol.ErrForbidden)
+
+	bob.send(protocol.TypeBotUpdate, "u1", protocol.BotSpec{BotID: bot.ID, Name: ptr("Mine")})
+	bob.expectError(protocol.ErrForbidden)
+
+	bob.send(protocol.TypeBotDelete, "d1", protocol.BotRef{BotID: bot.ID})
+	bob.expectError(protocol.ErrForbidden)
+}
+
+func TestBotCreateRejectsABadName(t *testing.T) {
+	f := newFixture(t)
+	alice, _ := f.hello(t, uuidA, "Alice", "")
+
+	alice.send(protocol.TypeBotCreate, "c1", protocol.BotSpec{Name: ptr("   ")})
+	alice.expectError(protocol.ErrInvalidInput)
+
+	alice.send(protocol.TypeBotCreate, "c2", protocol.BotSpec{})
+	alice.expectError(protocol.ErrInvalidInput)
+
+	alice.send(protocol.TypeBotCreate, "c3", protocol.BotSpec{Name: ptr("DJ")})
+	alice.expect(protocol.TypeBotState)
+
+	// The name is unique, exactly as it is in the panel.
+	alice.send(protocol.TypeBotCreate, "c4", protocol.BotSpec{Name: ptr("dj")})
+	alice.expectError(protocol.ErrBotNameUsed)
+}
+
+func TestDisablingABotStopsIt(t *testing.T) {
+	f := newFixture(t)
+	lk := newFakeLiveKit(t)
+	f.enableMediaForBots(t, lk)
+
+	bot := f.addBot(t, "DJ", musicFolder(t, "one.mp3"))
+	alice, room := f.roomWith(t)
+
+	alice.send(protocol.TypeBotMove, "m1", protocol.BotMove{BotID: bot.ID, RoomID: room.ID})
+	alice.expect(protocol.TypeBotState)
+	view := alice.botControl(protocol.BotActionPlay, bot.ID)
+	if view.State != protocol.BotPlaying {
+		t.Fatalf("bot should be playing, got %+v", view)
+	}
+
+	alice.send(protocol.TypeBotUpdate, "u1", protocol.BotSpec{
+		BotID: bot.ID, Enabled: ptr(false),
+	})
+	var disabled protocol.Bot
+	alice.decode(alice.expect(protocol.TypeBotState), &disabled)
+	if disabled.Enabled {
+		t.Fatalf("bot is still enabled: %+v", disabled)
+	}
+	if disabled.State == protocol.BotPlaying {
+		t.Fatalf("a disabled bot must stop playing, got %+v", disabled)
+	}
+	lk.waitFor(t, "DeleteIngress")
+}

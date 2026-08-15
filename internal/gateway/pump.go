@@ -186,6 +186,12 @@ func (g *Gateway) dispatch(ctx context.Context, sess *session.Session, data []by
 		g.handleBotControl(ctx, sess, env)
 	case protocol.TypeBotMove:
 		g.handleBotMove(ctx, sess, env)
+	case protocol.TypeBotCreate:
+		g.handleBotCreate(ctx, sess, env)
+	case protocol.TypeBotUpdate:
+		g.handleBotUpdate(ctx, sess, env)
+	case protocol.TypeBotDelete:
+		g.handleBotDelete(ctx, sess, env)
 
 	case protocol.TypeHello:
 		sess.SendError(env.ID, protocol.ErrBadRequest, "hello is accepted only once, at the start of the connection")
