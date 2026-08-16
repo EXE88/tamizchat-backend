@@ -65,6 +65,18 @@ Every platform at once:
 make release        # linux/windows, amd64/arm64, into dist/
 ```
 
+> **`403 Forbidden` while downloading modules?** `proxy.golang.org` and
+> `sum.golang.org` are Google services and are blocked from some countries. Point
+> Go at a mirror once, and the build works:
+>
+> ```bash
+> go env -w GOPROXY=https://goproxy.io,direct
+> go env -w GOSUMDB=off
+> ```
+>
+> `goproxy.cn` or `mirrors.aliyun.com/goproxy/` are alternatives if that one is
+> slow. Keep the `,direct` at the end.
+
 ## First run
 
 ```bash

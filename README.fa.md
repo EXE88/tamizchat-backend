@@ -79,6 +79,26 @@ make release        # لینوکس/ویندوز، amd64/arm64، در پوشه‌
 
 <div dir="rtl">
 
+> **موقع دانلود ماژول‌ها `403 Forbidden` گرفتید؟** `proxy.golang.org` و
+> `sum.golang.org` سرویس‌های گوگل‌اند و از بعضی کشورها بلاک‌اند. یک بار Go را به
+> یک آینه وصل کنید تا بیلد کار کند:
+
+</div>
+
+```bash
+go env -w GOPROXY=https://goproxy.io,direct
+go env -w GOSUMDB=off
+```
+
+<div dir="rtl">
+
+اگر آن کند بود، `goproxy.cn` یا `mirrors.aliyun.com/goproxy/` جایگزین‌اند. آن
+`,direct` انتهای آدرس را حذف نکنید.
+
+</div>
+
+<div dir="rtl">
+
 ## اولین اجرا
 
 </div>

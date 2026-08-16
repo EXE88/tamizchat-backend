@@ -19,9 +19,14 @@ There you get no microphone without HTTPS, except on `localhost`.
 
 ## Do you need Ingress?
 
-Only for the **music bot**. Voice chat, video chat and screen sharing all work
-without it. Recommendation: get it running without Ingress first, then add it if
-you want the bot. One less service is one less thing to break.
+**No.** Earlier versions of TamizChat played the music bot through LiveKit's
+Ingress service, which also needed Redis and a webhook. That is gone: the bot now
+joins the room as an ordinary participant and the server publishes the audio
+itself. You need **only LiveKit** — nothing else — for voice, video, screen
+sharing *and* the music bot.
+
+If you find `ingress.yaml` or a `redis` section in the deploy files, they are
+leftovers from the old design and are not used.
 
 ---
 
@@ -32,8 +37,7 @@ docker run --rm livekit/livekit-server generate-keys
 ```
 
 It prints two lines: an `API...` key and a secret. Keep both — you need them in
-three places: `livekit.yaml`, `ingress.yaml` (if you want the bot) and the
-TamizChat panel.
+two places: `livekit.yaml` and the TamizChat panel.
 
 If you do not have Docker:
 
@@ -128,40 +132,15 @@ If it says `disabled`, one of those three values is still empty.
 
 ---
 
-## Adding the music bot (optional)
+## The music bot
 
-1. Uncomment the `redis` section in `livekit.yaml`.
-2. Put the key and secret in `ingress.yaml`.
-3. Bring it up:
+Nothing to set up here. Once LiveKit works (the steps above), the bot works — no
+Ingress, no Redis, no webhook, and no `network.public_host` to configure.
 
-```bash
-docker compose --profile bots up -d
-curl http://127.0.0.1:8086     # Ingress health
-```
-
-4. In the TamizChat panel you **must** set:
-
-```
-network.public_host = http://<server ip>:8080
-```
-
-Without it the bot plays nothing. The reason: Ingress has to **fetch** the music
-file from your server, and the server cannot guess what address it is reachable
-at from outside.
-
-5. Configure the LiveKit webhook. Add this to `livekit.yaml`:
-
-```yaml
-webhook:
-  api_key: APIchangeme          # the same key
-  urls:
-    - http://<server ip>:8080/api/v1/livekit/webhook
-```
-
-Without this, the bot **goes quiet after the first track** — the server never
-learns that the track ended and that it should start the next one.
-
-6. Create the bot from **panel option 10** with a name and a music folder path.
+Create and fill bots from the **client's admin panel** (an administrator with the
+`manage_bots` permission), or a folder-based bot from **panel option 10**. Tracks
+you upload from the client are converted to Ogg/Opus by the client and published
+by the server as-is; the server never fetches anything or decodes audio.
 
 ---
 
@@ -174,11 +153,10 @@ read the LiveKit log.
 **The app does not reach media at all** → test `livekit.url` from the client's
 own machine: `curl http://<ip>:7880`.
 
-**The bot plays only one track** → the webhook is not configured (step 5 above).
-
-**The bot plays nothing at all** → `network.public_host` is empty, or Ingress
-cannot reach that address. Test from inside the container:
-`docker exec tamizchat-ingress wget -qO- http://<server ip>:8080/healthz`
+**The bot says it is playing but nobody hears it** → this is a LiveKit media
+problem, not a bot one. Check that ordinary voice works for people in the room
+first; if voice is silent too, it is the UDP port or `use_external_ip` above.
+Run the server with `tamizchat run -log debug` to see each track it publishes.
 
 ---
 
