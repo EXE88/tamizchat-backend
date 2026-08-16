@@ -72,6 +72,23 @@ note()  { printf '    %s%s%s\n' "$DIM" "$*" "$R"; }
 warn()  { printf '%s !! %s%s\n' "$YELLOW" "$*" "$R"; }
 die()   { printf '%s !! %s%s\n' "$RED" "$*" "$R" >&2; exit 1; }
 
+# The install stops the service for a while to seed its settings. If the script
+# ends before starting it again — an error, a Ctrl+C — the server must still
+# come back up, and the temporary SQL (which holds secrets) must go.
+NEED_START=0
+SQL_FILE=""
+LIST_FILE=""
+cleanup() {
+  [ -n "$SQL_FILE" ] && rm -f "$SQL_FILE"
+  [ -n "$LIST_FILE" ] && rm -f "$LIST_FILE"
+  if [ "$NEED_START" = 1 ]; then
+    printf '\n    starting %s again before leaving\n' "$APP_NAME"
+    systemctl start "$APP_NAME" >/dev/null 2>&1 || true
+  fi
+  return 0
+}
+trap cleanup EXIT INT TERM
+
 # ask "Question" "default"  -> echoes the answer
 ask() {
   local prompt="$1" default="${2:-}" reply
@@ -295,8 +312,28 @@ command -v systemctl >/dev/null 2>&1 || die "systemd is required (this script in
 
 step "Checking the basics"
 need_cmd curl curl || warn "curl is missing; some steps may not work"
-need_cmd sqlite3 sqlite3 || die "sqlite3 is required to write the settings; install it and run again"
+need_cmd sqlite3 sqlite3 || warn "sqlite3 is missing"
 info "package manager: ${PKG:-unknown}   architecture: $(uname -m)"
+
+# The settings are seeded straight into the database with the sqlite3 CLI, and
+# the tables the server creates are STRICT — a table option SQLite only learned
+# in 3.37. On an older CLI the seeding is skipped and the values are printed for
+# the panel instead, which is a working install either way.
+SKIP_SEED=0
+SQLITE_VER="$(sqlite3 -version 2>/dev/null | awk '{print $1}')"
+if [ -z "$SQLITE_VER" ]; then
+  SKIP_SEED=1
+else
+  sv_major="${SQLITE_VER%%.*}"; sv_rest="${SQLITE_VER#*.}"; sv_minor="${sv_rest%%.*}"
+  case "$sv_major$sv_minor" in
+    *[!0-9]*) SKIP_SEED=1 ;;
+    *) if [ "$sv_major" -lt 3 ] || { [ "$sv_major" -eq 3 ] && [ "$sv_minor" -lt 37 ]; }; then
+         SKIP_SEED=1
+       fi ;;
+  esac
+  info "sqlite3 $SQLITE_VER"
+fi
+[ "$SKIP_SEED" = 1 ] && warn "sqlite3 is too old to write the settings; they will be printed for the panel instead"
 
 # --- 2. get the binary -------------------------------------------------------
 
@@ -429,31 +466,61 @@ info "unit written: $UNIT_PATH"
 # The first start creates the database and runs the migrations; the settings
 # below are written into that database while the server is stopped.
 step "Creating the database"
+
+# Every sqlite3 call goes through the service user. Run as root, the CLI creates
+# a root-owned database file the server can then never write to — and because
+# sqlite3 creates the file merely by opening it, polling with it would lose the
+# race against the starting server and break the install (this really happened).
+as_svc() {
+  if command -v runuser >/dev/null 2>&1; then runuser -u "$SVC_USER" -- "$@"
+  else su -s /bin/sh "$SVC_USER" -c "$(printf '%q ' "$@")"; fi
+}
+
+# A leftover empty file from an earlier attempt is exactly that failure state.
+if [ -f "$DB_PATH" ] && [ ! -s "$DB_PATH" ]; then
+  rm -f "$DB_PATH" "$DB_PATH-wal" "$DB_PATH-shm"
+  note "removed an empty database file left by an earlier attempt"
+fi
+
 systemctl restart "$APP_NAME"
 
-db_ready() { sqlite3 "$DB_PATH" 'SELECT count(*) FROM settings;' >/dev/null 2>&1; }
+# Wait for the server itself to create the file, then check the migrations ran.
+db_ready() {
+  [ -s "$DB_PATH" ] || return 1
+  [ "$SKIP_SEED" = 1 ] && return 0   # an old CLI cannot read STRICT tables
+  as_svc sqlite3 "$DB_PATH" 'SELECT count(*) FROM settings;' >/dev/null 2>&1
+}
 for _ in $(seq 1 30); do
   db_ready && break
   sleep 1
 done
 if ! db_ready; then
-  systemctl status "$APP_NAME" --no-pager -l || true
-  die "the server did not create the database. See: journalctl -u $APP_NAME -n 50"
+  printf '\n'
+  journalctl -u "$APP_NAME" -n 30 --no-pager 2>/dev/null || systemctl status "$APP_NAME" --no-pager -l || true
+  die "the server did not create the database (the log above says why)"
 fi
 info "database ready: $DB_PATH"
+# From here until the final start the service is down. Whatever happens — an
+# error, a Ctrl+C, a question the operator walks away from — it must not be left
+# that way: the cleanup trap starts it again.
+NEED_START=1
 systemctl stop "$APP_NAME"
 
 # --- 5. settings -------------------------------------------------------------
 
 SQL_FILE="$(mktemp)"
-trap 'rm -f "$SQL_FILE"' EXIT
+LIST_FILE="$(mktemp)"
 
 sq() { printf '%s' "$1" | sed "s/'/''/g"; }
 set_setting() {
-  printf "INSERT INTO settings (key, value, updated_at) VALUES ('%s','%s',unixepoch())\n" \
+  # strftime rather than unixepoch(): the latter arrived in SQLite 3.38 and the
+  # CLI on a stable distribution is often older than that. The CAST keeps the
+  # value an integer, which the STRICT table requires.
+  printf "INSERT INTO settings (key, value, updated_at) VALUES ('%s','%s',CAST(strftime('%%s','now') AS INTEGER))\n" \
     "$(sq "$1")" "$(sq "$2")" >> "$SQL_FILE"
   printf "  ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at;\n" \
     >> "$SQL_FILE"
+  printf '  %s = %s\n' "$1" "$2" >> "$LIST_FILE"
 }
 
 step "Server settings"
@@ -628,8 +695,19 @@ if [ "$USE_LIVEKIT" = 1 ]; then
     LK_HOST="$DOMAIN"
     [ -n "$LK_HOST" ] || LK_HOST="$(ask 'Address clients reach this server on (IP or domain)' "$(guess_ip)")"
 
-    LK_KEY="API$(openssl rand -hex 6 2>/dev/null || head -c 6 /dev/urandom | od -An -tx1 | tr -d ' \n')"
-    LK_SECRET="$(openssl rand -base64 32 2>/dev/null | tr -d '\n' || head -c 32 /dev/urandom | base64 | tr -d '\n')"
+    # Reuse the keys of an existing installation. Generating new ones on a
+    # re-run would leave the running container on the old pair — the config is
+    # bind-mounted, so `compose up -d` alone does not reload it.
+    LK_KEY=""; LK_SECRET=""
+    if [ -f "$LIVEKIT_DIR/livekit.yaml" ]; then
+      LK_KEY="$(awk '/^keys:/{getline; gsub(/[: ].*/,"",$1); print $1; exit}' "$LIVEKIT_DIR/livekit.yaml")"
+      LK_SECRET="$(awk '/^keys:/{getline; sub(/^[^:]*:[ ]*/,""); print; exit}' "$LIVEKIT_DIR/livekit.yaml")"
+      [ -n "$LK_KEY" ] && [ -n "$LK_SECRET" ] && info "reusing the existing LiveKit keys"
+    fi
+    if [ -z "$LK_KEY" ] || [ -z "$LK_SECRET" ]; then
+      LK_KEY="API$(openssl rand -hex 6 2>/dev/null || head -c 6 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+      LK_SECRET="$(openssl rand -base64 32 2>/dev/null | tr -d '\n' || head -c 32 /dev/urandom | base64 | tr -d '\n')"
+    fi
 
     mkdir -p "$LIVEKIT_DIR"
     cat > "$LIVEKIT_DIR/livekit.yaml" <<EOF
@@ -666,7 +744,10 @@ services:
 EOF
     chmod 0600 "$LIVEKIT_DIR/livekit.yaml"
 
-    (cd "$LIVEKIT_DIR" && docker compose up -d) || warn "LiveKit did not start; check: docker compose -f $LIVEKIT_DIR/docker-compose.yml logs"
+    # The config is a bind mount, so a plain `up -d` on an already-running
+    # container would keep serving the old file; force it to re-read.
+    (cd "$LIVEKIT_DIR" && docker compose up -d && docker compose restart livekit >/dev/null) \
+      || warn "LiveKit did not start; check: docker compose -f $LIVEKIT_DIR/docker-compose.yml logs"
 
     set_setting livekit.url "ws://$LK_HOST:7880"
     set_setting livekit.api_key "$LK_KEY"
@@ -688,9 +769,23 @@ fi
 # --- 8. write the settings ---------------------------------------------------
 
 step "Writing the settings"
-sqlite3 "$DB_PATH" < "$SQL_FILE" || die "could not write the settings into $DB_PATH"
+if [ "$SKIP_SEED" = 1 ]; then
+  warn "sqlite3 $SQLITE_VER is too old to write into this database (3.37+ is needed)."
+  warn "Nothing is lost - enter these in 'tamizchat-panel', option 2:"
+  printf '\n'
+  cat "$LIST_FILE"
+  printf '\n'
+  note "the server keeps its defaults until you do: listen :8080, no password"
+  # The listen address chosen above was not applied, so the rest of the script
+  # must check the default port instead.
+  LISTEN=":8080"; LISTEN_PORT="8080"
+else
+  # The file stays at mktemp's 0600 (it holds the server password and the LiveKit
+  # secret); the redirection opens it as root and the child inherits the fd.
+  as_svc sqlite3 "$DB_PATH" < "$SQL_FILE" || die "could not write the settings into $DB_PATH"
+  info "$(grep -c '^INSERT' "$SQL_FILE") settings stored in the database"
+fi
 chown -R "$SVC_USER:$SVC_USER" "$APP_DIR"
-info "$(grep -c '^INSERT' "$SQL_FILE") settings stored in the database"
 
 # A port below 1024 cannot be bound by a non-root user; give the binary the
 # capability instead of running the server as root.
@@ -761,6 +856,7 @@ fi
 
 step "Starting the server"
 systemctl restart "$APP_NAME"
+NEED_START=0
 sleep 2
 
 HEALTH_URL="http://${LISTEN/#:/127.0.0.1:}/healthz"
