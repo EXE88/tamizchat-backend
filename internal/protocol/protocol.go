@@ -725,6 +725,12 @@ type MediaState struct {
 	Mic    bool `json:"mic"`
 	Cam    bool `json:"cam"`
 	Screen bool `json:"screen"`
+	// Deaf means the user has turned their own speakers off and is hearing
+	// nobody. It is theirs to declare, like the microphone: the server does not
+	// stop sending them audio, because a client that is not listening is not the
+	// server's business — but the room deserves to know that talking to them is
+	// pointless.
+	Deaf bool `json:"deaf,omitempty"`
 }
 
 // MediaStateEvent announces someone's media state to the server.

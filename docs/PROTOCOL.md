@@ -96,7 +96,7 @@ the client can build its interface immediately without an extra request.
 | `file.upload_request` | `{"name", "size"}` | Upload permission, **before** any bytes are sent |
 | `file.download_token` | `{"file_id"}` | A short-lived download link |
 | `media.token` | — | LiveKit credentials for the current room |
-| `media.set_state` | `{"mic", "cam", "screen"}` | Announce what is switched on |
+| `media.set_state` | `{"mic", "cam", "screen", "deaf"}` | Announce what is switched on |
 | `paint.begin` | `{"tool", "color", "width", "points"}` | Start a stroke; the reply carries `stroke_id` |
 | `paint.append` | `{"stroke_id", "points"}` | Add points to a stroke being drawn |
 | `paint.end` | `{"stroke_id"}` | End of the stroke |
