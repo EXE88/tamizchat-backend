@@ -162,6 +162,11 @@ func (g *Gateway) dispatch(ctx context.Context, sess *session.Session, data []by
 	case protocol.TypeFileDownloadToken:
 		g.handleFileDownloadToken(sess, env)
 
+	case protocol.TypeAvatarUploadRequest:
+		g.handleAvatarUploadRequest(sess, env)
+	case protocol.TypeAvatarClear:
+		g.handleAvatarClear(sess, env)
+
 	case protocol.TypeMediaToken:
 		g.handleMediaToken(sess, env)
 	case protocol.TypeMediaSetState:

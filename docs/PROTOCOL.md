@@ -95,6 +95,8 @@ the client can build its interface immediately without an extra request.
 | `admin.role.revoke` | `{"client_uuid", "role_id"}` | |
 | `file.upload_request` | `{"name", "size"}` | Upload permission, **before** any bytes are sent |
 | `file.download_token` | `{"file_id"}` | A short-lived download link |
+| `avatar.upload_request` | — | Permission to upload the caller's own profile picture |
+| `avatar.clear` | — | Removes the caller's own profile picture |
 | `media.token` | — | LiveKit credentials for the current room |
 | `media.set_state` | `{"mic", "cam", "screen", "deaf"}` | Announce what is switched on |
 | `paint.begin` | `{"tool", "color", "width", "points"}` | Start a stroke; the reply carries `stroke_id` |
@@ -129,9 +131,9 @@ the client can build its interface immediately without an extra request.
 | `error` | `{"code": "...", "message": "..."}` |
 | `user.joined` | `{"client_uuid", "username", "joined_at", "room_id"}` |
 | `user.left` | `{"client_uuid", "username", "reason"}` |
-| `user.updated` | A User — for a name change only |
+| `user.updated` | A User — a name change, or a new profile picture |
 | `room.list` | `{"rooms": [Room]}` |
-| `room.joined` | `{"room": Room}` — only to the requester |
+| `room.joined` | `{"room": Room, "reason"?}` — only to that user. `reason` is `moved_by_admin` when they did not ask to be there, and absent when they did |
 | `room.left` | `{"room_id", "reason"}` — only to that user |
 | `room.created` / `room.updated` | A Room |
 | `room.deleted` | `{"room_id"}` |
@@ -289,7 +291,12 @@ The codes are stable identifiers; a client should show its own text based on
 
 ## Room-leave reasons (`reason`)
 
-`left` · `switched_room` · `disconnected` · `room_deleted`
+`left` · `switched_room` · `disconnected` · `room_deleted` · `moved_by_admin`
+
+`moved_by_admin` travels on `room.member_left` **and** on the matching
+`room.member_joined`, so every client can tell an administrator placing somebody
+from that person walking in. It is the only reason a `room.member_joined` ever
+carries: an ordinary arrival has none.
 
 ## Username rules
 
@@ -440,6 +447,47 @@ Files are as temporary as chat:
 - At server startup the whole upload folder is cleared; no file survives a
   restart, because every file belongs to a live room.
 
+
+## Profile pictures
+
+A profile picture belongs to the person, not to a room, so — unlike everything
+under Files — it is permanent, survives a purge and is not room-scoped. It is
+also the one piece of user content served without a token.
+
+### Uploading
+
+1. The client sends `avatar.upload_request`. There is no payload and no target:
+   a user may only change their own picture, and the ticket is bound to the
+   caller's `client_uuid` on the server.
+2. The reply is an `avatar.upload_ticket`: `{"url", "token", "expires_at",
+   "max_size"}`. The ticket is single-use and short-lived.
+3. The client `POST`s the raw image bytes to the ticket's `url`
+   (`/api/v1/avatar`). The token is accepted in the query string and as
+   `Authorization: Bearer`.
+4. The server **decodes and re-encodes** the picture: cropped to its centre
+   square, scaled to 256×256, written as JPEG. Whatever arrived is not what is
+   stored, which is what makes an SVG or a disguised HTML file a non-issue and
+   caps what one user costs the disk.
+5. Everyone is told through an ordinary `user.updated`, the same event a rename
+   produces. There is no separate avatar event to learn.
+
+`avatar.clear` removes it and announces the same way.
+
+### Fetching
+
+`GET /api/v1/avatar/{client_uuid}` returns the JPEG. No token: it is shown
+beside a name every user on the server can already see, and a per-viewer ticket
+would be a round trip that protects nothing.
+
+The `avatar` field on a User is the picture's **tag**, empty when they have
+none. It is not a URL and not the bytes: it changes only when the picture
+changes, so a client fetches once per tag and draws the cached copy for every
+appearance of that person after that. The same tag is returned as the `ETag`,
+so even a client that asks again gets a 304.
+
+Errors: `uploads_disabled` when the operator has switched the feature off,
+`file_invalid` for something that will not decode as an image, `file_too_large`
+above 8 MB, `forbidden` for a spent or unknown ticket.
 
 ## Voice, video and screen sharing
 

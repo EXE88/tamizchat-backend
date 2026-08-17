@@ -207,6 +207,18 @@ var registry = buildRegistry(
 	},
 
 	Setting{
+		Key: KeyAvatarsEnabled, Section: "uploads", Kind: KindBool, Default: "true",
+		Title: "Profile pictures enabled",
+		Help:  "Allow users to upload a picture shown instead of the first letter of their name.",
+	},
+	Setting{
+		Key: KeyAvatarsDir, Section: "uploads", Kind: KindString, Default: "data/avatars",
+		Title:    "Profile picture folder",
+		Help:     "Where profile pictures are kept. Unlike room files these are permanent.",
+		Validate: notEmpty,
+	},
+
+	Setting{
 		Key: KeyPaintEnabled, Section: "paint", Kind: KindBool, Default: "true",
 		Title: "Paint board enabled", Help: "Allow shared drawing in rooms.",
 	},
@@ -322,6 +334,8 @@ const (
 	KeyUploadsDir         = "uploads.dir"
 	KeyUploadsTokenTTLSec = "uploads.token_ttl_sec"
 	KeyUploadsThumbMaxPx  = "uploads.thumb_max_px"
+	KeyAvatarsEnabled     = "uploads.avatars_enabled"
+	KeyAvatarsDir         = "uploads.avatars_dir"
 
 	KeyPaintEnabled       = "paint.enabled"
 	KeyPaintMaxStrokes    = "paint.max_strokes"

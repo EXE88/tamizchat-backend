@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"tamizchat/internal/access"
+	"tamizchat/internal/avatars"
 	"tamizchat/internal/bots"
 	"tamizchat/internal/chat"
 	"tamizchat/internal/config"
@@ -92,6 +93,16 @@ func Run(ctx context.Context, opts Options) error {
 
 	paintMgr := paint.NewManager(cfg, roomMgr, accessMgr, accessMgr)
 
+	// Profile pictures. Unlike room files these are permanent, so they get a
+	// folder of their own — the upload folder is emptied at startup.
+	var avatarMgr *avatars.Manager
+	if cfg.Bool(config.KeyAvatarsEnabled) {
+		avatarMgr, err = avatars.New(cfg.String(config.KeyAvatarsDir))
+		if err != nil {
+			return err
+		}
+	}
+
 	botMgr, err := bots.New(ctx, cfg, store, bots.NewPublisher(mediaMgr), roomMgr, sessions)
 	if err != nil {
 		return err
@@ -113,7 +124,7 @@ func Run(ctx context.Context, opts Options) error {
 	})
 
 	gw := gateway.New(cfg, sessions, roomMgr, chatMgr, fileMgr, mediaMgr,
-		paintMgr, botMgr, accessMgr, entryGuard, proxies, store, serverUUID)
+		paintMgr, botMgr, avatarMgr, accessMgr, entryGuard, proxies, store, serverUUID)
 
 	handler := httpapi.Handler(httpapi.Deps{
 		Config:      cfg,
@@ -130,6 +141,8 @@ func Run(ctx context.Context, opts Options) error {
 		MaxTrackBytes: func() int64 {
 			return int64(cfg.Int(config.KeyBotsMaxTrackMB)) << 20
 		},
+		Avatars:  avatarsOrNil(avatarMgr),
+		OnAvatar: gw.AnnounceAvatar,
 	})
 
 	addr := cfg.String(config.KeyListenAddr)
@@ -228,4 +241,18 @@ func serve(srv *http.Server, cfg *config.Config) error {
 		return fmt.Errorf("listen on %s: %w", srv.Addr, err)
 	}
 	return nil
+}
+
+// avatarsOrNil keeps a nil manager out of the HTTP layer as a *nil interface*,
+// not as an interface holding a nil pointer.
+//
+// Assigning a typed nil straight into the field would make `d.Avatars != nil`
+// true, the routes would be registered, and the first request would call a
+// method on nothing. This is the standard Go trap and the reason the endpoints
+// are guarded by a plain nil check at all.
+func avatarsOrNil(m *avatars.Manager) httpapi.Avatars {
+	if m == nil {
+		return nil
+	}
+	return m
 }

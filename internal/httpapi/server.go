@@ -33,6 +33,10 @@ type Deps struct {
 	Bots Bots
 	// MaxTrackBytes is the current ceiling for one uploaded track.
 	MaxTrackBytes func() int64
+	// Avatars stores and serves profile pictures. Nil disables both endpoints.
+	Avatars Avatars
+	// OnAvatar announces a changed profile picture to every connected client.
+	OnAvatar func(clientUUID, version string)
 }
 
 // Handler builds the router.
@@ -75,6 +79,11 @@ func Handler(d Deps) http.Handler {
 
 	if d.Bots != nil && d.MaxTrackBytes != nil {
 		mux.HandleFunc("POST /api/v1/bot-track", d.handleBotTrackUpload)
+	}
+
+	if d.Avatars != nil {
+		mux.HandleFunc("POST /api/v1/avatar", d.handleAvatarUpload)
+		mux.HandleFunc("GET /api/v1/avatar/{id}", d.handleAvatarFetch)
 	}
 
 	return recoverPanics(secureHeaders(logRequests(mux)))

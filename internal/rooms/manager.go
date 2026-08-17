@@ -364,7 +364,7 @@ func (m *Manager) Join(sess *session.Session, roomID, password string) (*Room, e
 		return nil, ErrBadPassword
 	}
 
-	return m.enter(sess, room, false)
+	return m.enter(sess, room, false, protocol.ReasonSwitchedRoom)
 }
 
 // Force places a session into a room ignoring the password, the role lock and
@@ -376,11 +376,17 @@ func (m *Manager) Force(sess *session.Session, roomID string) (*Room, error) {
 	if !ok {
 		return nil, ErrNotFound
 	}
-	return m.enter(sess, room, true)
+	return m.enter(sess, room, true, protocol.ReasonMoved)
 }
 
 // enter is the shared body of Join and Force.
-func (m *Manager) enter(sess *session.Session, room *Room, ignoreCapacity bool) (*Room, error) {
+//
+// reason travels with both broadcasts this produces — the leave from the old
+// room and the arrival in the new one. Without it every client saw an admin
+// move as an ordinary room switch, which is not a distinction the clients could
+// have made for themselves: it is only knowable here, and the sound a client
+// plays for "somebody was moved into your room" had never once fired.
+func (m *Manager) enter(sess *session.Session, room *Room, ignoreCapacity bool, reason string) (*Room, error) {
 	roomID := room.ID()
 	if sess.RoomID() == roomID {
 		return room, nil // already there; joining again is a no-op
@@ -398,7 +404,7 @@ func (m *Manager) enter(sess *session.Session, room *Room, ignoreCapacity bool) 
 	room.mu.Unlock()
 
 	if previous := sess.RoomID(); previous != "" {
-		m.leaveRoom(sess, previous, protocol.ReasonSwitchedRoom)
+		m.leaveRoom(sess, previous, reason)
 	}
 	sess.SetRoomID(roomID)
 
@@ -406,8 +412,17 @@ func (m *Manager) enter(sess *session.Session, room *Room, ignoreCapacity bool) 
 	// renders the full room tree with who is in each room, so everyone needs to
 	// know. This is also why there is no separate user.updated here — one event
 	// per move, carrying the room it happened in.
+	//
+	// Only a move is worth naming on the way in. An ordinary arrival has no
+	// reason, and calling a first join "switched_room" would be a lie a client
+	// has no way to check.
+	arrival := ""
+	if reason == protocol.ReasonMoved {
+		arrival = reason
+	}
+
 	m.global.Broadcast(protocol.TypeRoomMemberJoined, protocol.RoomMember{
-		RoomID: roomID, User: sess.User(),
+		RoomID: roomID, User: sess.User(), Reason: arrival,
 	}, sess.ClientUUID)
 
 	slog.Debug("room join", "room", room.Name(), "username", sess.Username())

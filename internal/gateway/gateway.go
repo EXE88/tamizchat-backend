@@ -16,6 +16,7 @@ import (
 
 	"tamizchat/internal/access"
 	"tamizchat/internal/authz"
+	"tamizchat/internal/avatars"
 	"tamizchat/internal/bots"
 	"tamizchat/internal/chat"
 	"tamizchat/internal/config"
@@ -58,6 +59,7 @@ type Gateway struct {
 	media    *media.Manager
 	paint    *paint.Manager
 	bots     *bots.Manager
+	avatars  *avatars.Manager
 	access   *access.Manager
 	guard    *guard.Guard
 	proxies  *httpapi.TrustedProxies
@@ -70,7 +72,8 @@ type Gateway struct {
 // permission policy, so there is a single source of truth for who may do what.
 func New(cfg *config.Config, sessions *session.Manager, roomMgr *rooms.Manager,
 	chatMgr *chat.Manager, fileMgr *files.Manager, mediaMgr *media.Manager,
-	paintMgr *paint.Manager, botMgr *bots.Manager, accessMgr *access.Manager,
+	paintMgr *paint.Manager, botMgr *bots.Manager, avatarMgr *avatars.Manager,
+	accessMgr *access.Manager,
 	entryGuard *guard.Guard, proxies *httpapi.TrustedProxies, users Users,
 	serverUUID string) *Gateway {
 	return &Gateway{
@@ -82,6 +85,7 @@ func New(cfg *config.Config, sessions *session.Manager, roomMgr *rooms.Manager,
 		media:    mediaMgr,
 		paint:    paintMgr,
 		bots:     botMgr,
+		avatars:  avatarMgr,
 		access:   accessMgr,
 		guard:    entryGuard,
 		proxies:  proxies,
@@ -187,6 +191,14 @@ func (g *Gateway) handshake(ctx context.Context, conn *websocket.Conn, remote st
 
 	sess := session.New(storage.NewUUID(), clientUUID, username, remote)
 	g.applyRoles(sess)
+
+	// Their picture, if they uploaded one on a previous visit. Read from the
+	// folder rather than remembered anywhere, so it is right after a restore or
+	// a hand-copied data folder.
+	if g.avatars != nil {
+		sess.SetAvatar(g.avatars.Version(clientUUID))
+	}
+
 	replaced, err := g.sessions.Add(sess)
 	if errors.Is(err, session.ErrServerFull) {
 		return nil, g.reject(conn, env.ID, protocol.ErrServerFull, "the server is full")

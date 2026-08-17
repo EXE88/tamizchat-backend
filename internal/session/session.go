@@ -28,6 +28,7 @@ type Session struct {
 
 	mu       sync.RWMutex
 	username string
+	avatar   string
 	roomID   string
 	roles    []string
 	muted    bool
@@ -65,6 +66,24 @@ func (s *Session) Username() string {
 func (s *Session) SetUsername(name string) {
 	s.mu.Lock()
 	s.username = name
+	s.mu.Unlock()
+}
+
+// Avatar is the tag of this user's profile picture ("" when they have none).
+func (s *Session) Avatar() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.avatar
+}
+
+// SetAvatar records a new picture tag.
+//
+// Held on the session rather than looked up per user for the same reason as the
+// username: every room listing describes every member, so this is read far more
+// often than it is written.
+func (s *Session) SetAvatar(tag string) {
+	s.mu.Lock()
+	s.avatar = tag
 	s.mu.Unlock()
 }
 
@@ -125,6 +144,7 @@ func (s *Session) User() protocol.User {
 		RoomID:     s.roomID,
 		Roles:      append([]string(nil), s.roles...),
 		Muted:      s.muted,
+		Avatar:     s.avatar,
 		Media:      s.media,
 	}
 }

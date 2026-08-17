@@ -287,7 +287,10 @@ func (g *Gateway) handleAdminMove(ctx context.Context, sess *session.Session, en
 		return
 	}
 
-	_ = victim.SendMessage(protocol.TypeRoomJoined, "", protocol.RoomJoined{Room: room.View(true)})
+	// The reason is what tells the moved user's client that this was not their
+	// own doing, so it can say so and play the right sound.
+	_ = victim.SendMessage(protocol.TypeRoomJoined, "",
+		protocol.RoomJoined{Room: room.View(true), Reason: protocol.ReasonMoved})
 	g.access.Log(ctx, storage.ModEntry{
 		ActorUUID: sess.ClientUUID, ActorName: sess.Username(),
 		Action:     "move",

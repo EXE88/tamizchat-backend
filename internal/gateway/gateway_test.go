@@ -15,6 +15,7 @@ import (
 
 	"tamizchat/internal/access"
 	"tamizchat/internal/authz"
+	"tamizchat/internal/avatars"
 	"tamizchat/internal/bots"
 	"tamizchat/internal/chat"
 	"tamizchat/internal/config"
@@ -134,8 +135,13 @@ func newFixture(t *testing.T) *fixture {
 		}
 	})
 
+	avatarMgr, err := avatars.New(t.TempDir())
+	if err != nil {
+		t.Fatalf("avatars: %v", err)
+	}
+
 	gw := gateway.New(cfg, sessions, roomMgr, chatMgr, fileMgr, mediaMgr,
-		paintMgr, botMgr, accessMgr, entryGuard, proxies, store, "server-uuid")
+		paintMgr, botMgr, avatarMgr, accessMgr, entryGuard, proxies, store, "server-uuid")
 
 	// The tests drive the real HTTP surface, so the upload and download routes
 	// are exercised exactly as a client would reach them.

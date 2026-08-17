@@ -57,6 +57,12 @@ const (
 	TypeFileUploadRequest = "file.upload_request"
 	TypeFileDownloadToken = "file.download_token"
 
+	// A profile picture: ask for a ticket, POST the bytes, or clear the one
+	// already stored. Both are about the caller and take no target — a user's
+	// own picture is the only one they may change.
+	TypeAvatarUploadRequest = "avatar.upload_request"
+	TypeAvatarClear         = "avatar.clear"
+
 	TypeMediaToken    = "media.token"
 	TypeMediaSetState = "media.set_state"
 
@@ -122,8 +128,9 @@ const (
 	TypeAdminRoleGone     = "admin.role.deleted"
 	TypeAdminOK           = "admin.ok" // an action succeeded and needs no payload
 
-	TypeFileUploadTicket = "file.upload_ticket"
-	TypeFileDownload     = "file.download"
+	TypeFileUploadTicket   = "file.upload_ticket"
+	TypeFileDownload       = "file.download"
+	TypeAvatarUploadTicket = "avatar.upload_ticket"
 
 	TypeMediaCredentials = "media.token"
 	TypeMediaState       = "media.state"
@@ -247,6 +254,12 @@ type User struct {
 	// client looks their names and colours up in the role list from welcome.
 	Roles []string `json:"roles,omitempty"`
 	Muted bool     `json:"muted,omitempty"`
+	// Avatar is the tag of this user's profile picture, empty when they have
+	// none. It is not the picture and not a URL: it changes only when the
+	// picture changes, so a client fetches /api/v1/avatar/{client_uuid} once per
+	// tag and draws the cached copy for every appearance of that person after
+	// that.
+	Avatar string `json:"avatar,omitempty"`
 	// Media is what the user currently has switched on, as reported by their
 	// client. Whether they are *speaking* right now is not here: that changes
 	// many times a second and LiveKit already tells every client directly.
@@ -280,8 +293,13 @@ type RoomJoin struct {
 }
 
 // RoomJoined confirms entry and carries the room's current state.
+//
+// Reason is empty when the user asked to be here. It is only set when they did
+// not — an administrator moving them — and it is what lets a client tell "I
+// walked in" from "I was put here", which look identical otherwise.
 type RoomJoined struct {
-	Room Room `json:"room"`
+	Room   Room   `json:"room"`
+	Reason string `json:"reason,omitempty"`
 }
 
 // RoomLeft confirms departure. Reason is empty when the user left on purpose.
@@ -461,6 +479,20 @@ type FileUploadRequest struct {
 // FileUploadTicket is the permission to upload exactly one file.
 type FileUploadTicket struct {
 	UploadID  string `json:"upload_id"`
+	URL       string `json:"url"`   // path to POST the bytes to
+	Token     string `json:"token"` // also accepted as a bearer token
+	ExpiresAt int64  `json:"expires_at"`
+	MaxSize   int64  `json:"max_size"`
+}
+
+// AvatarUploadTicket is the permission to upload exactly one profile picture.
+//
+// There is no matching download ticket: a profile picture is fetched from
+// /api/v1/avatar/{client_uuid} with no token at all. It is deliberately the one
+// piece of user content that is not room-scoped — everybody on the server is
+// shown it, next to a name they can already see, so a ticket per viewer per
+// person would be a round trip that protects nothing.
+type AvatarUploadTicket struct {
 	URL       string `json:"url"`   // path to POST the bytes to
 	Token     string `json:"token"` // also accepted as a bearer token
 	ExpiresAt int64  `json:"expires_at"`

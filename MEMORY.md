@@ -4,7 +4,8 @@ This file is the memory carried between chats. Read it first at the start of any
 new conversation, and update "Current status" and "Decisions" at the end of any
 piece of work.
 
-Last updated: 2026-08-12 — **the backend is complete** (phase 11)
+Last updated: 2026-08-17 — the backend is complete (phase 11), plus the
+production-feedback round below
 
 ---
 
@@ -454,6 +455,56 @@ Dev note: `livekit.dev.yaml` must announce an address both the host client and
 the backend container can reach (`rtc.node_ip` = the machine's LAN address).
 `127.0.0.1` means a different thing in each of them, and the bot's connection
 simply timed out.
+
+### The production-feedback round (2026-08-17)
+
+Two backend changes came out of the first real deployment. Both were reported as
+client bugs and neither was.
+
+- **A move was indistinguishable from an ordinary room switch.** `enter` always
+  broadcast `switched_room` on the way out and *no reason at all* on the way in,
+  so `moved_by_admin` never reached a single client through a membership event.
+  Every client's "somebody was moved into your room" sound had therefore never
+  once played, and no amount of client work could have fixed it. `enter` now
+  takes the reason: `Join` passes `switched_room`, `Force` passes
+  `moved_by_admin`, and it travels on both broadcasts. Only a move names a
+  reason on the way *in* — calling a first join "switched_room" would be a lie a
+  client cannot check.
+- **`room.joined` carries a `Reason` now.** A moved user received only that
+  frame, with nothing in it to say they had not asked to be there. Worse, the
+  client had no handler for it at all, so a moved user never re-read the room
+  tree and their voice stayed connected to the room they had been taken out of.
+  That is what "he left but we could still hear him" turned out to be.
+
+### Profile pictures — `internal/avatars`
+
+A picture belongs to the person, not to a room, so it is permanent, survives a
+purge and is not room-scoped. That is why it is a package of its own rather than
+another kind of upload; it must not go anywhere near the `uploads.dir` folder,
+which is emptied at startup.
+
+- **Whatever arrives is decoded and re-encoded**: centre-cropped to a square,
+  scaled to 256x256, written as JPEG. That is the whole of the input validation
+  and it is stronger than any extension check — an SVG or a disguised HTML file
+  simply fails to decode, and one user cannot cost the disk more than ~15 kB.
+- **The version tag is the file's modification time**, not a column. It only has
+  to change when the picture changes, and keeping it in the database would be a
+  second source of truth that a restored backup could disagree with. It is
+  rebuilt from the folder at startup and served as the `ETag`.
+- Upload reuses the phase-6 pattern (ticket over the socket, bytes over HTTP).
+  **Fetching needs no token at all**: the picture is shown beside a name every
+  user on the server can already see.
+- The change is announced as an ordinary `user.updated` — the event clients
+  already handle for renames. No new event to learn.
+- `Manager.Open` whitelists the id to the characters a UUID is made of. That is
+  the only path safety here and it is enough because it is a whitelist: no dot,
+  separator or colon survives it. `avatars_test.go` pins that.
+- Two new settings in the `uploads` section: `uploads.avatars_enabled` and
+  `uploads.avatars_dir` (default `data/avatars`).
+- **Trap avoided in `app.go`:** a nil `*avatars.Manager` assigned straight into
+  the `httpapi.Avatars` field would be a non-nil interface, the routes would
+  register and the first request would call a method on nothing. `avatarsOrNil`
+  exists for exactly that.
 
 ## Final backend status
 
